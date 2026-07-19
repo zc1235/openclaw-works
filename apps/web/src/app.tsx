@@ -6,6 +6,7 @@ import { InviteGuardLayout } from "./layouts/invite-guard-layout";
 import { WorkspaceLayout } from "./layouts/workspace-layout";
 import { ChannelsPage } from "./pages/channels";
 import { CommunitySkillDetailPage } from "./pages/community-skill-detail";
+import { DesktopChatPage } from "./pages/desktop-chat";
 import { FeishuBindPage } from "./pages/feishu-bind";
 import { HomePage } from "./pages/home";
 import { IntegrationsPage } from "./pages/integrations";
@@ -27,6 +28,7 @@ function DocumentTitleSync() {
       "/claim": t("title.claim"),
       "/workspace": t("title.home"),
       "/workspace/home": t("title.home"),
+      "/workspace/chat": t("title.desktopChat"),
       "/workspace/integrations": t("title.integrations"),
       "/workspace/rewards": t("title.rewards"),
       "/workspace/skills": t("title.skills"),
@@ -64,6 +66,11 @@ export function App() {
             <Route element={<WorkspaceLayout />}>
               <Route path="/workspace" element={<HomePage />} />
               <Route path="/workspace/home" element={<HomePage />} />
+              <Route path="/workspace/chat" element={<DesktopChatPage />} />
+              <Route
+                path="/workspace/chat/:id"
+                element={<DesktopChatPage />}
+              />
               <Route path="/workspace/sessions" element={<SessionsPage />} />
               <Route
                 path="/workspace/sessions/:id"

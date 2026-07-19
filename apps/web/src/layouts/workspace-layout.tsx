@@ -576,6 +576,7 @@ function WorkspaceLayoutInner() {
   const isModelsPage =
     location.pathname.includes("/models") ||
     location.pathname.includes("/settings");
+  const isChatPage = location.pathname.startsWith("/workspace/chat");
 
   const handleLogout = async () => {
     setShowLogoutConfirm(false);
@@ -827,6 +828,19 @@ function WorkspaceLayoutInner() {
             >
               <Home size={16} className="shrink-0" />
               {t("layout.nav.home")}
+            </Link>
+            <Link
+              to="/workspace/chat"
+              onClick={() => {
+                track("workspace_sidebar_click", { target: "chat" });
+              }}
+              className={cn(
+                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
+                isChatPage && "nav-item-active",
+              )}
+            >
+              <MessageSquare size={16} className="shrink-0" />
+              {t("layout.nav.chat")}
             </Link>
             <Link
               to="/workspace/skills"

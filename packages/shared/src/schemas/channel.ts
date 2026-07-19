@@ -10,6 +10,7 @@ export const channelTypeSchema = z.enum([
   "telegram",
   "whatsapp",
   "qqbot",
+  "desktop",
 ]);
 
 export const channelStatusSchema = z.enum([

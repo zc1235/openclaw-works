@@ -1316,7 +1316,7 @@ export type GetApiV1ChannelsResponses = {
         channels: Array<{
             id: string;
             botId: string;
-            channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+            channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
             accountId: string;
             status: 'pending' | 'connected' | 'disconnected' | 'error';
             teamName: string;
@@ -1400,7 +1400,7 @@ export type PostApiV1ChannelsSlackConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1477,7 +1477,7 @@ export type PostApiV1ChannelsDiscordConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1520,7 +1520,7 @@ export type PostApiV1ChannelsFeishuConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1594,7 +1594,7 @@ export type PostApiV1ChannelsTelegramConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1669,7 +1669,7 @@ export type PostApiV1ChannelsDingtalkConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1743,7 +1743,7 @@ export type PostApiV1ChannelsQqbotConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1817,7 +1817,7 @@ export type PostApiV1ChannelsWecomConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -1890,7 +1890,7 @@ export type GetApiV1ChannelsByChannelIdStatusResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -2037,7 +2037,7 @@ export type PostApiV1ChannelsWhatsappConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;
@@ -2141,7 +2141,7 @@ export type PostApiV1ChannelsWechatConnectResponses = {
     200: {
         id: string;
         botId: string;
-        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot';
+        channelType: 'slack' | 'discord' | 'feishu' | 'dingtalk' | 'wecom' | 'wechat' | 'telegram' | 'whatsapp' | 'qqbot' | 'desktop';
         accountId: string;
         status: 'pending' | 'connected' | 'disconnected' | 'error';
         teamName: string;

@@ -107,6 +107,7 @@ const zhCN = {
   "title.signIn": "登录 · nexu",
   "title.claim": "认领 · nexu",
   "title.home": "首页 · nexu",
+  "title.desktopChat": "对话 · nexu",
   "title.integrations": "集成 · nexu",
   "title.rewards": "奖励 · nexu",
   "title.skills": "技能 · nexu",
@@ -118,6 +119,7 @@ const zhCN = {
   // ── Workspace Layout ──
   "layout.brand": "你的数字同事",
   "layout.nav.home": "首页",
+  "layout.nav.chat": "对话",
   "layout.nav.rewards": "奖励",
   "layout.nav.deployments": "部署",
   "layout.nav.skills": "技能",
@@ -1205,6 +1207,23 @@ const zhCN = {
   "common.loading": "加载中...",
   "common.connect": "连接",
   "common.disconnect": "断开连接",
+
+  // ── 桌面原生对话 ──
+  "desktopChat.newChat": "新建对话",
+  "desktopChat.agent": "Agent",
+  "desktopChat.emptySessions": "还没有桌面对话",
+  "desktopChat.emptyTitle": "和你的 Agent 直接对话",
+  "desktopChat.emptyDesc":
+    "在下方输入框写点什么，就能在桌面里和已配置的 Agent 聊天，不需要接入飞书或 Slack。",
+  "desktopChat.subtitle": "直接在桌面里和你的 Agent 对话。",
+  "desktopChat.inputPlaceholder": "发送消息…（Shift+Enter 换行）",
+  "desktopChat.hint": "Enter 发送 · Shift+Enter 换行",
+  "desktopChat.send": "发送",
+  "desktopChat.abort": "停止",
+  "desktopChat.streaming": "回复中…",
+  "desktopChat.youInitial": "我",
+  "desktopChat.untitled": "未命名对话",
+  "desktopChat.error.noBot": "还没有 Agent，请先在首页创建一个。",
 } as const;
 
 export default zhCN;

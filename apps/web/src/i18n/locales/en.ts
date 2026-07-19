@@ -110,6 +110,7 @@ const en = {
   "title.signIn": "Sign In · nexu",
   "title.claim": "Claim · nexu",
   "title.home": "Home · nexu",
+  "title.desktopChat": "Chat · nexu",
   "title.integrations": "Integrations · nexu",
   "title.rewards": "Rewards · nexu",
   "title.skills": "Skills · nexu",
@@ -121,6 +122,7 @@ const en = {
   // ── Workspace Layout ──
   "layout.brand": "Your digital coworker",
   "layout.nav.home": "Home",
+  "layout.nav.chat": "Chat",
   "layout.nav.rewards": "Rewards",
   "layout.nav.deployments": "Deployments",
   "layout.nav.skills": "Skills",
@@ -1275,6 +1277,24 @@ const en = {
   "common.loading": "Loading...",
   "common.connect": "Connect",
   "common.disconnect": "Disconnect",
+
+  // ── Desktop native chat ──
+  "desktopChat.newChat": "New chat",
+  "desktopChat.agent": "Agent",
+  "desktopChat.emptySessions": "No desktop chats yet.",
+  "desktopChat.emptyTitle": "Chat with your agent",
+  "desktopChat.emptyDesc":
+    "Type a message below to start talking to your configured agent right here on the desktop. No Slack or Feishu setup required.",
+  "desktopChat.subtitle": "Talk to your agent directly from the desktop.",
+  "desktopChat.inputPlaceholder": "Send a message… (Shift+Enter for newline)",
+  "desktopChat.hint": "Enter to send · Shift+Enter for newline",
+  "desktopChat.send": "Send",
+  "desktopChat.abort": "Stop",
+  "desktopChat.streaming": "Replying…",
+  "desktopChat.youInitial": "Y",
+  "desktopChat.untitled": "Untitled chat",
+  "desktopChat.error.noBot":
+    "No bot configured yet. Create one from the Home page first.",
 } as const;
 
 export default en;

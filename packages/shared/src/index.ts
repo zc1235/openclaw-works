@@ -8,6 +8,7 @@ export * from "./schemas/openclaw-config.js";
 export * from "./schemas/runtime-internal.js";
 export * from "./schemas/artifact.js";
 export * from "./schemas/session.js";
+export * from "./schemas/desktop-chat.js";
 export * from "./schemas/user.js";
 export * from "./schemas/shared-slack-claim.js";
 export * from "./schemas/integration.js";

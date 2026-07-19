@@ -3892,7 +3892,8 @@
                               "wechat",
                               "telegram",
                               "whatsapp",
-                              "qqbot"
+                              "qqbot",
+                              "desktop"
                             ]
                           },
                           "accountId": {
@@ -4079,7 +4080,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -4207,7 +4209,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -4521,7 +4524,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -4639,7 +4643,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -4943,7 +4948,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -5319,7 +5325,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -5513,7 +5520,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -5694,7 +5702,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -6017,7 +6026,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
@@ -6257,7 +6267,8 @@
                         "wechat",
                         "telegram",
                         "whatsapp",
-                        "qqbot"
+                        "qqbot",
+                              "desktop"
                       ]
                     },
                     "accountId": {
