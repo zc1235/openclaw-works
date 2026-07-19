@@ -1248,32 +1248,7 @@ function WorkspaceLayoutInner() {
                 </div>
               </div>
 
-              <div
               {/* Mobile user menu — removed with nexu accounts */}
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setShowLogoutConfirm(!showLogoutConfirm)}
-                  className="flex gap-2.5 items-center w-full px-2 py-2 rounded-lg transition-all hover:bg-surface-3 cursor-pointer"
-                >
-                  <div className="flex justify-center items-center w-7 h-7 rounded-md bg-gradient-to-br from-accent/20 to-accent/5 text-[10px] font-bold text-accent ring-1 ring-accent/10 shrink-0">
-                    {userInitial}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-[12px] text-text-primary truncate font-medium">
-                      {userEmail}
-                    </div>
-                  </div>
-                  <ChevronUp
-                    size={12}
-                    className={cn(
-                      "text-text-muted/50 shrink-0 transition-transform duration-150",
-                      showLogoutConfirm ? "rotate-0" : "rotate-180",
-                    )}
-                  />
-                </button>
-              </div>
             </div>
           </div>
         </div>
