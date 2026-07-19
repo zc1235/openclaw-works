@@ -223,9 +223,10 @@ export function DesktopChatPage() {
 
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
-      if (!activeBotId) {
-        throw new Error(t("desktopChat.error.noBot"));
-      }
+      // First-install path: activeBotId may still be null while the bots
+      // query is loading (or the user has never created a bot). The
+      // controller will auto-provision a default bot in that case, so we
+      // just send `botId: undefined` and let the server decide.
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -251,7 +252,7 @@ export function DesktopChatPage() {
 
       await streamDesktopChat(
         {
-          botId: activeBotId,
+          botId: activeBotId ?? undefined,
           sessionKey: activeSessionKey ?? undefined,
           text,
         },
@@ -264,6 +265,27 @@ export function DesktopChatPage() {
                 if (!activeSessionKey) {
                   setActiveSessionKey(event.sessionKey);
                 }
+                // On first install we may not have picked a bot yet; the
+                // server auto-provisions one and reports its id here.
+                if (!activeBotId) {
+                  setActiveBotId(event.botId);
+                }
+                break;
+              }
+              case "toolCall": {
+                setStreamMessages((previous) =>
+                  previous.map((message) =>
+                    message.id === assistantMessage.id
+                      ? {
+                          ...message,
+                          text:
+                            message.text.length > 0
+                              ? `${message.text}\n\n[tool] ${event.summary ?? event.name}`
+                              : `[tool] ${event.summary ?? event.name}`,
+                        }
+                      : message,
+                  ),
+                );
                 break;
               }
               case "delta": {
@@ -369,12 +391,15 @@ export function DesktopChatPage() {
     if (!value || sendMutation.isPending) return;
     setDraft("");
     sendMutation.mutate(value);
+    // Refetch the bots list — on first install the server just auto-provisioned
+    // one, so this pulls it into the sidebar's model selector state.
+    void queryClient.invalidateQueries({ queryKey: ["desktop-chat-bots"] });
     requestAnimationFrame(() => {
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
     });
-  }, [draft, sendMutation]);
+  }, [draft, sendMutation, queryClient]);
 
   const handleAbort = useCallback(() => {
     abortRef.current?.abort();
@@ -396,7 +421,9 @@ export function DesktopChatPage() {
     }
   };
 
-  const noBots = !botsQuery.isLoading && bots.length === 0;
+  // The server auto-provisions a default bot on the first message when none
+  // exists, so an empty bots list is NOT a blocking state.
+  const noBots = false;
 
   return (
     <div className="flex h-full">

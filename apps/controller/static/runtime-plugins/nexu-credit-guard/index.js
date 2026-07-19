@@ -84,6 +84,10 @@ const ERROR_MESSAGES = {
     "⚠️ 当前访问密钥不可用，可能已经过期、被停用或被撤销。请更换一个可用的密钥后再试。如仍无法解决，请查看 {contact}。",
     "⚠️ Your API key is no longer usable — it may have expired or been revoked. Please replace it and try again. If the issue persists, see {contact}.",
   ],
+  blocked_by_service: [
+    "⚠️ 当前模型服务拒绝了本次请求（HTTP 403，通常是 Cloudflare 或上游代理拦截）。首次使用 nexu 桌面版通常需要先在\"模型\"页配置一个自己的 BYOK 模型（例如 OpenAI、DeepSeek、Google Gemini 等），配置好后再重新提问即可。如仍无法解决，请查看 {contact}。",
+    "⚠️ The model service refused this request (HTTP 403, usually a Cloudflare/upstream proxy block). On a fresh install you typically need to open the Models page and configure your own BYOK model (OpenAI, DeepSeek, Gemini, etc.) before asking again. If the issue persists, see {contact}.",
+  ],
   insufficient_credits: [
     "⚠️ 当前可用积分不足，暂时无法继续使用。你可以购买 nexu 的会员补充积分，或切换到自带密钥的方式继续使用。如仍无法解决，请查看 {contact}。",
     "⚠️ Insufficient credits. You can purchase a nexu plan to top up, or switch to using your own API key. If the issue persists, see {contact}.",
@@ -184,6 +188,17 @@ const CONTENT_PATTERNS = [
   { pattern: /invalid.api.key/i, code: "invalid_api_key" },
   { pattern: /api key.+invalid/i, code: "invalid_api_key" },
   { pattern: /forbidden.+api.key/i, code: "forbidden_api_key" },
+  // Cloudflare-style block pages / raw 403 responses. On a fresh nexu install
+  // the default `link/gemini-*` model points at nexu.link/v1 which requires a
+  // cloud login; without one, Cloudflare returns "your request was blocked"
+  // with error 1010 or a plain 403 body. Map that to a helpful hint that
+  // steers the user to BYOK provider configuration instead of leaving a raw
+  // Cloudflare page as the assistant reply.
+  { pattern: /your request was blocked/i, code: "blocked_by_service" },
+  { pattern: /blocked by cloudflare/i, code: "blocked_by_service" },
+  { pattern: /cloudflare.+ray.+id/i, code: "blocked_by_service" },
+  { pattern: /error\s*1010/i, code: "blocked_by_service" },
+  { pattern: /^403\b|\b403\s+forbidden\b/i, code: "blocked_by_service" },
   { pattern: /model.not.found/i, code: "model_not_found" },
   { pattern: /request.too.large/i, code: "request_too_large" },
   { pattern: /content.too.large/i, code: "request_too_large" },

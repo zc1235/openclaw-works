@@ -22,13 +22,11 @@ import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
+  Cable,
   ChevronRight,
   ChevronUp,
   CircleHelp,
-  Gift,
-  Home,
   Info,
-  LogOut,
   Mail,
   Menu,
   MessageSquare,
@@ -577,6 +575,10 @@ function WorkspaceLayoutInner() {
     location.pathname.includes("/models") ||
     location.pathname.includes("/settings");
   const isChatPage = location.pathname.startsWith("/workspace/chat");
+  const isChannelsPage = location.pathname.startsWith("/workspace/channels");
+  const isIntegrationsPage = location.pathname.startsWith(
+    "/workspace/integrations",
+  );
 
   const handleLogout = async () => {
     setShowLogoutConfirm(false);
@@ -813,22 +815,8 @@ function WorkspaceLayoutInner() {
           className="flex-1 overflow-y-auto"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
-          {/* Nav items */}
+          {/* Nav items — chat/new-task at top, then skills, channels, integrations, models */}
           <div className="px-2 pt-3 pb-1">
-            <Link
-              to="/workspace/home"
-              onClick={() => {
-                track("workspace_home_click");
-                track("workspace_sidebar_click", { target: "home" });
-              }}
-              className={cn(
-                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
-                isHomePage && "nav-item-active",
-              )}
-            >
-              <Home size={16} className="shrink-0" />
-              {t("layout.nav.home")}
-            </Link>
             <Link
               to="/workspace/chat"
               onClick={() => {
@@ -840,7 +828,7 @@ function WorkspaceLayoutInner() {
               )}
             >
               <MessageSquare size={16} className="shrink-0" />
-              {t("layout.nav.chat")}
+              {t("layout.nav.newTask")}
             </Link>
             <Link
               to="/workspace/skills"
@@ -860,6 +848,45 @@ function WorkspaceLayoutInner() {
                   {installedSkillsCount}
                 </span>
               )}
+            </Link>
+            <Link
+              to="/workspace/channels"
+              onClick={() => {
+                track("workspace_sidebar_click", { target: "channels" });
+              }}
+              className={cn(
+                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
+                isChannelsPage && "nav-item-active",
+              )}
+            >
+              <Cable size={16} className="shrink-0" />
+              {t("layout.nav.channels")}
+            </Link>
+            <Link
+              to="/workspace/integrations"
+              onClick={() => {
+                track("workspace_sidebar_click", { target: "integrations" });
+              }}
+              className={cn(
+                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
+                isIntegrationsPage && "nav-item-active",
+              )}
+            >
+              <BookOpen size={16} className="shrink-0" />
+              {t("layout.nav.integrations")}
+            </Link>
+            <Link
+              to="/workspace/models"
+              onClick={() => {
+                track("workspace_sidebar_click", { target: "models" });
+              }}
+              className={cn(
+                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
+                isModelsPage && "nav-item-active",
+              )}
+            >
+              <Settings size={16} className="shrink-0" />
+              {t("layout.nav.models")}
             </Link>
           </div>
 
@@ -929,228 +956,9 @@ function WorkspaceLayoutInner() {
           </div>
         </div>
 
-        {/* Sidebar growth card */}
-        <div
-          className="pb-1 shrink-0"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          {rewardsCardLoading ? (
-            <div data-rewards-card-loading="true" className="animate-pulse">
-              <div className="mx-3 mb-2 flex items-center gap-3 rounded-[12px] border border-[#F5DFC0]/40 bg-gradient-to-br from-[#FFF8F0] via-[#FFFAF5] to-[#FFF5EB] px-3.5 py-3">
-                <div className="h-7 w-7 rounded-[8px] bg-[#F6D7A8]" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-3 w-28 rounded-full bg-[#E7D4B5]" />
-                  <div className="h-2.5 w-14 rounded-full bg-[#F0E1C8]" />
-                </div>
-                <div className="h-3 w-8 rounded-full bg-[#E7D4B5]" />
-              </div>
-              <div className="px-3 mb-1.5">
-                <div className="w-full rounded-[8px] px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2.5 w-2.5 rounded-full bg-border/70" />
-                      <div className="h-2.5 w-12 rounded-full bg-border/70" />
-                    </div>
-                    <div className="h-2.5 w-16 rounded-full bg-border/60" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : !cloudConnected ? (
-            <div className="px-3 mb-1.5">
-              <button
-                type="button"
-                data-sidebar-growth-card="login"
-                onClick={() =>
-                  void handleCloudConnect(
-                    isHomePage ? "home" : isModelsPage ? "settings" : "home",
-                  )
-                }
-                className="group flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-primary)]"
-              >
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-border bg-surface-2">
-                  {cloudConnecting ? (
-                    <Sparkles
-                      size={12}
-                      className="animate-pulse text-text-secondary"
-                    />
-                  ) : (
-                    <img
-                      src="/brand/logo-black-1.svg"
-                      alt="nexu"
-                      className="h-3.5 w-3.5"
-                    />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-[11px] font-medium text-text-secondary">
-                    {t("layout.sidebar.loginTitle")}
-                  </div>
-                  <div className="mt-0.5 text-[10px] leading-none text-text-muted">
-                    {cloudConnecting
-                      ? t("layout.sidebar.loginPending")
-                      : t("layout.sidebar.loginSubtitle")}
-                  </div>
-                </div>
-                <ChevronRight
-                  size={12}
-                  className="shrink-0 text-text-muted transition-transform duration-200 group-hover:translate-x-0.5"
-                />
-              </button>
-            </div>
-          ) : (
-            <div>
-              {shouldShowRewardsBanner && (
-                <Link
-                  to="/workspace/rewards"
-                  data-sidebar-growth-card="rewards"
-                  className="group mx-3 mb-2 flex items-center gap-3 rounded-[12px] border border-[#F5DFC0]/50 bg-gradient-to-br from-[#FFF8F0] via-[#FFFAF5] to-[#FFF5EB] px-3.5 py-3 shadow-[0_1px_3px_rgba(245,200,120,0.08)] transition-all duration-200 hover:border-[#F0D0A0]/60 hover:shadow-[0_2px_8px_rgba(245,200,120,0.15)]"
-                  onClick={() => {
-                    track("workspace_growth_rewards_click");
-                    track("workspace_rewards_click");
-                    track("workspace_sidebar_click", { target: "rewards" });
-                  }}
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[linear-gradient(135deg,#fbbf24_0%,#fb923c_100%)] text-white shadow-[0_1px_3px_rgba(245,158,11,0.25)]">
-                    <Gift size={14} />
-                  </div>
-                  <span className="min-w-0 flex-1 text-[12px] font-medium leading-[1.3] text-text-primary">
-                    {t("layout.sidebar.rewardsTitle")}
-                  </span>
-                  <ChevronRight
-                    size={14}
-                    className="shrink-0 text-text-muted transition-transform duration-200 group-hover:translate-x-0.5"
-                  />
-                </Link>
-              )}
-              <div className="px-3 mb-1.5 relative" ref={balanceRef}>
-                <button
-                  type="button"
-                  data-sidebar-rewards-balance="true"
-                  className="group block w-full rounded-[8px] px-2.5 py-2 transition-colors hover:bg-surface-2 text-left"
-                  onClick={() => {
-                    if (canOpenBalancePopup) {
-                      setShowBalancePopup((prev) => !prev);
-                    } else {
-                      track("workspace_rewards_click");
-                      track("workspace_sidebar_click", { target: "credits" });
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className="text-[11px] text-[var(--color-brand-primary)]">
-                        ✦
-                      </span>
-                      <span className="truncate text-[11px] font-semibold leading-none text-text-secondary">
-                        {t("layout.sidebar.balanceLabel")}
-                      </span>
-                    </div>
-                    <span className="shrink-0 tabular-nums text-[11px] font-medium leading-none text-text-secondary">
-                      {rewardBalanceValue}
-                    </span>
-                  </div>
-                </button>
-                {canOpenBalancePopup && showBalancePopup
-                  ? createPortal(
-                      <div
-                        data-sidebar-rewards-balance-popup="true"
-                        className="fixed z-[9999] pb-2"
-                        style={(() => {
-                          const rect =
-                            balanceRef.current?.getBoundingClientRect();
-                          if (!rect) return { display: "none" };
-                          return {
-                            left: rect.left,
-                            width: Math.max(rect.width, 240),
-                            bottom: window.innerHeight - rect.top,
-                          };
-                        })()}
-                      >
-                        <div className="rounded-xl border border-border bg-surface-1 p-3.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
-                          <div className="mb-3 flex items-center justify-between">
-                            <span className="text-[13px] font-semibold text-text-primary">
-                              ✦ {t("layout.sidebar.balancePopup.total")}
-                            </span>
-                            <span className="tabular-nums text-[14px] font-bold text-text-primary">
-                              {rewardBalancePopupValue}
-                            </span>
-                          </div>
-                          <div className="space-y-2 border-t border-border/60 pt-2.5">
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1 text-[11px] text-text-muted">
-                                {t("layout.sidebar.balancePopup.earned")}
-                                <span className="group relative inline-flex cursor-default items-center">
-                                  <Info
-                                    size={10}
-                                    className="text-text-muted/60"
-                                  />
-                                  <span
-                                    role="tooltip"
-                                    className="pointer-events-none absolute bottom-full left-0 z-[10000] mb-1.5 w-52 rounded-md bg-neutral-800 px-2.5 py-1.5 text-left text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100"
-                                  >
-                                    {t(
-                                      "layout.sidebar.balancePopup.earnedTooltip",
-                                    )}
-                                  </span>
-                                </span>
-                              </span>
-                              <span className="tabular-nums text-[11px] font-medium text-text-secondary">
-                                {sidebarCreditBreakdown.giftedBalance}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="flex items-center gap-1 text-[11px] text-text-muted">
-                                {t("layout.sidebar.balancePopup.recharged")}
-                                <span className="group relative inline-flex cursor-default items-center">
-                                  <Info
-                                    size={10}
-                                    className="text-text-muted/60"
-                                  />
-                                  <span
-                                    role="tooltip"
-                                    className="pointer-events-none absolute bottom-full left-0 z-[10000] mb-1.5 w-52 rounded-md bg-neutral-800 px-2.5 py-1.5 text-left text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100"
-                                  >
-                                    {t(
-                                      "layout.sidebar.balancePopup.rechargedTooltip",
-                                    )}
-                                  </span>
-                                </span>
-                              </span>
-                              <span className="tabular-nums text-[11px] font-medium text-text-secondary">
-                                {sidebarCreditBreakdown.planBalance}
-                              </span>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            data-sidebar-rewards-balance-detail="true"
-                            className="mt-2.5 flex w-full items-center justify-between border-t border-border/60 pt-2.5 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
-                            onClick={() => {
-                              track("workspace_click_usage_detail");
-                              track("workspace_sidebar_click", {
-                                target: "credits_popup_detail",
-                              });
-                              void openExternalUrl(
-                                resolveCloudUsageUrl(
-                                  desktopCloudStatus?.cloudUrl,
-                                ),
-                              );
-                              setShowBalancePopup(false);
-                            }}
-                          >
-                            {t("layout.sidebar.balancePopup.viewDetail")}
-                            <ChevronRight size={12} />
-                          </button>
-                        </div>
-                      </div>,
-                      document.body,
-                    )
-                  : null}
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Sidebar growth card — removed with nexu accounts */}
+        {null}
+
 
         {/* Bottom action row */}
         <div
@@ -1256,67 +1064,7 @@ function WorkspaceLayoutInner() {
           </div>
         </div>
 
-        {/* Account — hidden in desktop client */}
-        {!isDesktopClient && (
-          <div className="relative shrink-0" ref={logoutRef}>
-            {showLogoutConfirm && (
-              <div className="absolute z-20 bottom-full left-1.5 right-1.5 mb-2">
-                <div className="rounded-xl border bg-surface-1 border-border shadow-xl shadow-black/10 overflow-hidden">
-                  <div className="px-3.5 py-3 border-b border-border">
-                    <div className="text-[12px] font-medium text-text-primary truncate whitespace-nowrap">
-                      {userEmail}
-                    </div>
-                  </div>
-                  <div className="p-1.5">
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[12px] font-medium text-text-muted hover:text-red-500 hover:bg-red-500/5 transition-all cursor-pointer whitespace-nowrap"
-                    >
-                      <LogOut size={13} />
-                      {t("layout.signOut")}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="border-t border-border px-2 py-2">
-              <button
-                type="button"
-                onClick={() => setShowLogoutConfirm(!showLogoutConfirm)}
-                className="flex gap-2.5 items-center w-full px-2 py-2 rounded-lg transition-all hover:bg-surface-3 cursor-pointer"
-              >
-                {userImage ? (
-                  <img
-                    src={userImage}
-                    alt={userName}
-                    className="w-7 h-7 rounded-md object-cover ring-1 ring-accent/10 shrink-0"
-                  />
-                ) : (
-                  <div className="flex justify-center items-center w-7 h-7 rounded-md bg-gradient-to-br from-accent/20 to-accent/5 text-[10px] font-bold text-accent ring-1 ring-accent/10 shrink-0">
-                    {userInitial}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="text-[12px] text-text-primary truncate font-medium whitespace-nowrap">
-                    {userName}
-                  </div>
-                  <div className="text-[10px] text-text-muted truncate whitespace-nowrap">
-                    {userEmail}
-                  </div>
-                </div>
-                <ChevronUp
-                  size={12}
-                  className={cn(
-                    "text-text-muted/50 shrink-0 transition-transform duration-150",
-                    showLogoutConfirm ? "rotate-0" : "rotate-180",
-                  )}
-                />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Account block — removed with nexu accounts */}
       </div>
 
       {/* Mobile drawer */}
@@ -1358,21 +1106,38 @@ function WorkspaceLayoutInner() {
                 {/* Nav items */}
                 <div className="px-3 pt-3 pb-1">
                   <Link
-                    to="/workspace/home"
+                    to="/workspace/chat"
                     onClick={() => {
-                      track("workspace_home_click");
-                      track("workspace_sidebar_click", { target: "home" });
+                      track("workspace_sidebar_click", { target: "chat" });
                       setMobileDrawerOpen(false);
                     }}
                     className={cn(
                       "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-0.5 px-3 py-2",
-                      isHomePage
+                      isChatPage
                         ? "bg-accent/10 text-accent"
                         : "text-text-muted hover:text-text-primary hover:bg-surface-3",
                     )}
                   >
-                    <Home size={14} />
-                    {t("layout.nav.home")}
+                    <MessageSquare size={14} />
+                    {t("layout.nav.newTask")}
+                  </Link>
+                  <Link
+                    to="/workspace/channels"
+                    onClick={() => {
+                      track("workspace_sidebar_click", {
+                        target: "channels_mobile",
+                      });
+                      setMobileDrawerOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 w-full rounded-lg text-[12px] font-medium transition-colors cursor-pointer mt-0.5 px-3 py-2",
+                      isChannelsPage
+                        ? "bg-accent/10 text-accent"
+                        : "text-text-muted hover:text-text-primary hover:bg-surface-3",
+                    )}
+                  >
+                    <Cable size={14} />
+                    {t("layout.nav.channels")}
                   </Link>
                   <Link
                     to="/workspace/skills"
@@ -1484,29 +1249,7 @@ function WorkspaceLayoutInner() {
               </div>
 
               <div
-                className="relative border-t border-border p-2"
-                ref={logoutRef}
-              >
-                {showLogoutConfirm && (
-                  <div className="absolute bottom-full left-2 right-2 mb-2 z-20">
-                    <div className="rounded-xl border bg-surface-1 border-border shadow-xl shadow-black/10 overflow-hidden">
-                      <div className="px-3.5 py-3 border-b border-border">
-                        <div className="text-[12px] font-medium text-text-primary truncate">
-                          {userEmail}
-                        </div>
-                      </div>
-                      <div className="p-1.5">
-                        <button
-                          type="button"
-                          onClick={handleLogout}
-                          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[12px] font-medium text-text-muted hover:text-red-500 hover:bg-red-500/5 transition-all cursor-pointer"
-                        >
-                          <LogOut size={13} />
-                          {t("layout.signOut")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              {/* Mobile user menu — removed with nexu accounts */}
                 )}
 
                 <button

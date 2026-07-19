@@ -1,11 +1,14 @@
-import { readFile } from "node:fs/promises";
 import { type OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   type DesktopStreamEvent,
-  openclawConfigSchema,
   sendDesktopMessageSchema,
 } from "@nexu/shared";
 import type { ControllerContainer } from "../app/container.js";
+import {
+  LOCAL_TOOL_DEFINITIONS,
+  executeLocalTool,
+  summariseToolCall,
+} from "../lib/local-tools.js";
 import { logger } from "../lib/logger.js";
 import { proxyFetch } from "../lib/proxy-fetch.js";
 import type { ControllerBindings } from "../types.js";
@@ -13,28 +16,44 @@ import type { ControllerBindings } from "../types.js";
 const DESKTOP_CHANNEL_TYPE = "desktop";
 const DESKTOP_SESSION_PREFIX = "desktop-";
 const HISTORY_MESSAGE_LIMIT = 40;
+const MAX_TOOL_ROUNDTRIPS = 6;
 
 // Module-scoped encoder — TextEncoder is a value binding in @types/node
 // (no DOM lib is loaded in controller tsconfig), so it cannot be used as a
 // type parameter. Keeping the instance here avoids any type-vs-value dance.
 const sseEncoder = new TextEncoder();
 
-type OpenAiCompatMessage = {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-};
+interface OpenAiToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
 
-type ResolvedProvider = {
-  agentId: string;
+interface OpenAiChatMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string | null;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: OpenAiToolCall[];
+}
+
+interface ResolvedProvider {
   botId: string;
   providerKey: string;
   modelId: string;
   baseUrl: string;
   apiKey: string;
   api: string;
-  extraHeaders?: Record<string, string> | undefined;
+  extraHeaders: Record<string, string> | undefined;
   systemPrompt: string | null;
-};
+}
+
+interface StreamAccumulator {
+  text: string;
+  toolCalls: OpenAiToolCall[];
+  finishReason: string | null;
+  streamError: string | null;
+}
 
 function buildOpenAiCompatUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/u, "")}/chat/completions`;
@@ -88,64 +107,67 @@ function deriveTitleFromText(text: string): string {
   return firstLine.length > 60 ? `${firstLine.slice(0, 57)}…` : firstLine;
 }
 
+function encodeSse(event: DesktopStreamEvent): Uint8Array {
+  return sseEncoder.encode(`data: ${JSON.stringify(event)}\n\n`);
+}
+
+/**
+ * Resolve the bot + provider entirely from the controller-owned config store.
+ * This lets desktop chat work on a fresh install (no openclaw.json needed —
+ * we create a default bot on demand) and returns everything needed to talk
+ * to the OpenAI-compatible upstream directly.
+ */
 async function resolveProvider(
   container: ControllerContainer,
   requestedBotId: string | undefined,
 ): Promise<ResolvedProvider | { error: string }> {
-  const rawConfig = await readFile(container.env.openclawConfigPath, "utf8");
-  const openclawConfig = openclawConfigSchema.parse(JSON.parse(rawConfig));
-
-  const preferredAgent = requestedBotId
-    ? openclawConfig.agents.list.find((agent) => agent.id === requestedBotId)
-    : undefined;
-  const agent =
-    preferredAgent ??
-    openclawConfig.agents.list.find((item) => item.default) ??
-    openclawConfig.agents.list[0];
-  if (!agent) {
-    return { error: "No agent configured" };
+  let bot = requestedBotId
+    ? await container.configStore.getBot(requestedBotId)
+    : null;
+  if (!bot) {
+    // First-install path: automatically provision a default bot so the user
+    // can send a message without visiting any setup page first.
+    bot = await container.configStore.getOrCreateDefaultBot();
   }
 
-  const defaultsModel = openclawConfig.agents.defaults?.model;
-  const rawModel =
-    typeof agent.model === "string"
-      ? agent.model
-      : (agent.model?.primary ??
-        (typeof defaultsModel === "string"
-          ? defaultsModel
-          : defaultsModel?.primary));
-
+  const rawModel = bot.modelId;
   if (!rawModel || !rawModel.includes("/")) {
-    return { error: "No compatible model configured" };
+    return {
+      error:
+        "The default bot has no model configured. Open the Models page and configure a BYOK provider (OpenAI, DeepSeek, Gemini, …) first.",
+    };
   }
-
   const slashIndex = rawModel.indexOf("/");
   const providerKey = rawModel.slice(0, slashIndex);
   const modelId = rawModel.slice(slashIndex + 1);
-  const provider = openclawConfig.models?.providers?.[providerKey];
-  if (
-    !provider?.baseUrl ||
-    !provider.apiKey ||
-    typeof provider.apiKey !== "string" ||
-    provider.api !== "openai-completions"
-  ) {
+
+  const config = await container.configStore.getConfig();
+  const provider = config.models?.providers?.[providerKey];
+  if (!provider?.baseUrl) {
     return {
-      error:
-        "Configured model provider is not OpenAI-compatible or lacks a static API key",
+      error: `The bot points at model "${rawModel}", but provider "${providerKey}" is not configured. Open the Models page and configure it with your API key.`,
+    };
+  }
+  if (typeof provider.apiKey !== "string" || provider.apiKey.length === 0) {
+    return {
+      error: `Provider "${providerKey}" has no API key. Open the Models page and paste your key, or pick a different provider.`,
+    };
+  }
+  if (provider.api !== "openai-completions") {
+    return {
+      error: `Provider "${providerKey}" uses the "${provider.api}" API, which desktop chat does not support yet. Please switch to an OpenAI-compatible provider (OpenAI, DeepSeek, Gemini, Groq, Together, …).`,
     };
   }
 
-  const bot = await container.configStore.getBot(agent.id);
   return {
-    agentId: agent.id,
-    botId: bot?.id ?? agent.id,
+    botId: bot.id,
     providerKey,
     modelId,
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey,
     api: provider.api,
     extraHeaders: toStringHeaderRecord(provider.headers),
-    systemPrompt: bot?.systemPrompt?.trim().length ? bot.systemPrompt : null,
+    systemPrompt: bot.systemPrompt?.trim().length ? bot.systemPrompt : null,
   };
 }
 
@@ -153,13 +175,13 @@ async function loadHistoryMessages(
   container: ControllerContainer,
   botId: string,
   sessionKey: string,
-): Promise<OpenAiCompatMessage[]> {
+): Promise<OpenAiChatMessage[]> {
   const history = await container.sessionService.getChatHistoryBySessionKey(
     botId,
     sessionKey,
     HISTORY_MESSAGE_LIMIT,
   );
-  const messages: OpenAiCompatMessage[] = [];
+  const messages: OpenAiChatMessage[] = [];
   for (const message of history.messages) {
     const content = extractCompatMessageText(message.content);
     if (!content) {
@@ -170,8 +192,170 @@ async function loadHistoryMessages(
   return messages;
 }
 
-function encodeSse(event: DesktopStreamEvent): Uint8Array {
-  return sseEncoder.encode(`data: ${JSON.stringify(event)}\n\n`);
+/**
+ * Perform one round-trip against the OpenAI-compatible provider, streaming
+ * text deltas to the SSE controller as they arrive and accumulating any
+ * tool_calls the model wants us to execute.
+ */
+async function streamOneRound(params: {
+  resolved: ResolvedProvider;
+  messages: OpenAiChatMessage[];
+  sseController: ReadableStreamDefaultController<Uint8Array>;
+}): Promise<StreamAccumulator> {
+  const accumulator: StreamAccumulator = {
+    text: "",
+    toolCalls: [],
+    finishReason: null,
+    streamError: null,
+  };
+
+  const upstream = await proxyFetch(
+    buildOpenAiCompatUrl(params.resolved.baseUrl),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${params.resolved.apiKey}`,
+        ...(params.resolved.extraHeaders ?? {}),
+      },
+      body: JSON.stringify({
+        model: params.resolved.modelId,
+        messages: params.messages,
+        stream: true,
+        tools: LOCAL_TOOL_DEFINITIONS,
+        tool_choice: "auto",
+      }),
+    },
+  );
+
+  if (!upstream.ok || !upstream.body) {
+    const errorText = await upstream.text();
+    accumulator.streamError =
+      errorText.trim().length > 0
+        ? errorText.slice(0, 500)
+        : `Upstream model provider failed (status ${upstream.status})`;
+    return accumulator;
+  }
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  let sseBuffer = "";
+
+  const drainDataLine = (data: string): void => {
+    if (!data || data === "[DONE]") {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(data) as {
+        choices?: Array<{
+          delta?: {
+            content?: string;
+            tool_calls?: Array<{
+              index?: number;
+              id?: string;
+              type?: string;
+              function?: { name?: string; arguments?: string };
+            }>;
+          };
+          finish_reason?: string | null;
+        }>;
+      };
+      const choice = parsed.choices?.[0];
+      if (!choice) {
+        return;
+      }
+      const delta = choice.delta;
+      if (delta?.content) {
+        accumulator.text += delta.content;
+        params.sseController.enqueue(
+          encodeSse({ type: "delta", text: delta.content }),
+        );
+      }
+      if (delta?.tool_calls) {
+        for (const partial of delta.tool_calls) {
+          const idx = partial.index ?? 0;
+          const existing = accumulator.toolCalls[idx];
+          if (!existing) {
+            accumulator.toolCalls[idx] = {
+              id: partial.id ?? `call_${idx}`,
+              type: "function",
+              function: {
+                name: partial.function?.name ?? "",
+                arguments: partial.function?.arguments ?? "",
+              },
+            };
+          } else {
+            if (partial.id) {
+              existing.id = partial.id;
+            }
+            if (partial.function?.name) {
+              existing.function.name = partial.function.name;
+            }
+            if (partial.function?.arguments) {
+              existing.function.arguments += partial.function.arguments;
+            }
+          }
+        }
+      }
+      if (choice.finish_reason) {
+        accumulator.finishReason = choice.finish_reason;
+      }
+    } catch {
+      // Ignore malformed SSE chunks from upstream providers.
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split("\n");
+      sseBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) {
+          continue;
+        }
+        drainDataLine(line.slice(6).trim());
+      }
+    }
+    const trailing = sseBuffer.trim();
+    if (trailing.startsWith("data: ")) {
+      drainDataLine(trailing.slice(6).trim());
+    }
+  } catch (error) {
+    accumulator.streamError = `stream error: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // reader may already be released
+    }
+  }
+
+  // Filter out any empty tool-call slots that never received a name — this
+  // happens when providers emit sparse indices.
+  accumulator.toolCalls = accumulator.toolCalls.filter(
+    (tc) => tc && tc.function.name.length > 0,
+  );
+  return accumulator;
+}
+
+function parseToolArgs(raw: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 export function registerDesktopChatRoutes(
@@ -223,28 +407,19 @@ export function registerDesktopChatRoutes(
       const derivedTitle = deriveTitleFromText(body.text);
 
       // On follow-up messages preserve the existing session title so we don't
-      // rewrite it with every user turn. Look it up once so appendCompatTranscript
-      // keeps a stable value.
+      // rewrite it with every user turn.
       let existingTitle = "";
       if (!isNewSession) {
-        const history =
-          await container.sessionService.getChatHistoryBySessionKey(
-            resolved.botId,
-            sessionKey,
-            1,
-          );
-        if (history.sessionKey) {
-          const sessionList = await container.sessionService.listSessions({
-            limit: 100,
-            offset: 0,
-            botId: resolved.botId,
-            channelType: DESKTOP_CHANNEL_TYPE,
-          });
-          existingTitle =
-            sessionList.sessions.find(
-              (session) => session.sessionKey === sessionKey,
-            )?.title ?? "";
-        }
+        const sessionList = await container.sessionService.listSessions({
+          limit: 100,
+          offset: 0,
+          botId: resolved.botId,
+          channelType: DESKTOP_CHANNEL_TYPE,
+        });
+        existingTitle =
+          sessionList.sessions.find(
+            (session) => session.sessionKey === sessionKey,
+          )?.title ?? "";
       }
 
       const persistTitle =
@@ -254,71 +429,19 @@ export function registerDesktopChatRoutes(
             ? existingTitle
             : derivedTitle;
 
-      const historyMessages = isNewSession
+      const historyMessages: OpenAiChatMessage[] = isNewSession
         ? []
         : await loadHistoryMessages(container, resolved.botId, sessionKey);
-      const outgoing: OpenAiCompatMessage[] = [];
+      const outgoing: OpenAiChatMessage[] = [];
       if (resolved.systemPrompt) {
         outgoing.push({ role: "system", content: resolved.systemPrompt });
       }
       outgoing.push(...historyMessages);
       outgoing.push({ role: "user", content: body.text });
 
-      const upstream = await proxyFetch(buildOpenAiCompatUrl(resolved.baseUrl), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${resolved.apiKey}`,
-          ...(resolved.extraHeaders ?? {}),
-        },
-        body: JSON.stringify({
-          model: resolved.modelId,
-          messages: outgoing,
-          stream: true,
-        }),
-      });
-
-      const decoder = new TextDecoder();
-
-      if (!upstream.ok || !upstream.body) {
-        const errorText = await upstream.text();
-        const errorStream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(
-              encodeSse({
-                type: "session",
-                botId: resolved.botId,
-                sessionKey,
-                title: persistTitle,
-              }),
-            );
-            controller.enqueue(
-              encodeSse({
-                type: "error",
-                message:
-                  errorText.trim().length > 0
-                    ? errorText.slice(0, 500)
-                    : `Upstream model provider failed (status ${upstream.status})`,
-              }),
-            );
-            controller.close();
-          },
-        });
-        return new Response(errorStream, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-            "X-Accel-Buffering": "no",
-          },
-        });
-      }
-
-      let assistantText = "";
       const stream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          controller.enqueue(
+        async start(sseController) {
+          sseController.enqueue(
             encodeSse({
               type: "session",
               botId: resolved.botId,
@@ -327,91 +450,73 @@ export function registerDesktopChatRoutes(
             }),
           );
 
-          const reader = upstream.body?.getReader();
-          if (!reader) {
-            controller.enqueue(
-              encodeSse({
-                type: "error",
-                message: "Upstream stream unavailable",
-              }),
-            );
-            controller.close();
-            return;
-          }
+          const runningMessages: OpenAiChatMessage[] = [...outgoing];
+          let assistantText = "";
+          let streamError: string | null = null;
 
-          let sseBuffer = "";
-          let streamFailed = false;
+          for (let round = 0; round < MAX_TOOL_ROUNDTRIPS; round += 1) {
+            const result = await streamOneRound({
+              resolved,
+              messages: runningMessages,
+              sseController,
+            });
+            assistantText += result.text;
 
-          const drainDataLine = (data: string): void => {
-            if (!data || data === "[DONE]") {
-              return;
+            if (result.streamError) {
+              streamError = result.streamError;
+              sseController.enqueue(
+                encodeSse({ type: "error", message: result.streamError }),
+              );
+              break;
             }
-            try {
-              const parsed = JSON.parse(data) as {
-                choices?: Array<{ delta?: { content?: string } }>;
-              };
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if (typeof delta === "string" && delta.length > 0) {
-                assistantText += delta;
-                controller.enqueue(
-                  encodeSse({ type: "delta", text: delta }),
-                );
-              }
-            } catch {
-              // Ignore malformed SSE chunks from upstream providers.
-            }
-          };
 
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
-                break;
-              }
-              if (!value) {
-                continue;
-              }
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split("\n");
-              sseBuffer = lines.pop() ?? "";
-              for (const line of lines) {
-                if (!line.startsWith("data: ")) {
-                  continue;
-                }
-                drainDataLine(line.slice(6).trim());
-              }
+            if (result.toolCalls.length === 0) {
+              break;
             }
-            const trailing = sseBuffer.trim();
-            if (trailing.startsWith("data: ")) {
-              drainDataLine(trailing.slice(6).trim());
+
+            // Reflect the assistant's tool-call turn in the running history
+            // (OpenAI protocol expects the assistant "tool_calls" message
+            // right before the tool result messages).
+            runningMessages.push({
+              role: "assistant",
+              content: result.text.length > 0 ? result.text : null,
+              tool_calls: result.toolCalls,
+            });
+
+            for (const toolCall of result.toolCalls) {
+              const args = parseToolArgs(toolCall.function.arguments);
+              const summary = summariseToolCall(toolCall.function.name, args);
+              sseController.enqueue(
+                encodeSse({
+                  type: "toolCall",
+                  name: toolCall.function.name,
+                  summary,
+                }),
+              );
+              logger.info(
+                {
+                  route: "desktopChat.messages",
+                  botId: resolved.botId,
+                  sessionKey,
+                  toolName: toolCall.function.name,
+                },
+                "desktop chat tool call",
+              );
+              const execution = await executeLocalTool(
+                toolCall.function.name,
+                args,
+              );
+              runningMessages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: execution.content,
+              });
             }
-          } catch (error) {
-            streamFailed = true;
-            controller.enqueue(
-              encodeSse({
-                type: "error",
-                message: `stream error: ${error instanceof Error ? error.message : String(error)}`,
-              }),
-            );
-            logger.error(
-              {
-                route: "desktopChat.messages",
-                botId: resolved.botId,
-                sessionKey,
-                error: error instanceof Error ? error.message : String(error),
-              },
-              "desktop chat upstream stream failed",
-            );
-          } finally {
-            try {
-              reader.releaseLock();
-            } catch {
-              // reader may already be released
-            }
+            // Loop back for the next model turn with tool results in-context.
           }
 
           const trimmedAssistant = assistantText.trim();
-          if (!streamFailed && trimmedAssistant.length > 0) {
+          if (!streamError && trimmedAssistant.length > 0) {
             try {
               await container.sessionService.appendCompatTranscript({
                 botId: resolved.botId,
@@ -419,9 +524,7 @@ export function registerDesktopChatRoutes(
                 title: persistTitle,
                 channelType: DESKTOP_CHANNEL_TYPE,
                 channelId: null,
-                metadata: {
-                  source: "desktop-native-chat",
-                },
+                metadata: { source: "desktop-native-chat" },
                 userText: body.text,
                 assistantText: trimmedAssistant,
                 provider: resolved.providerKey,
@@ -444,14 +547,14 @@ export function registerDesktopChatRoutes(
             }
           }
 
-          controller.enqueue(
+          sseController.enqueue(
             encodeSse({
               type: "done",
               provider: resolved.providerKey,
               model: resolved.modelId,
             }),
           );
-          controller.close();
+          sseController.close();
         },
       });
 
