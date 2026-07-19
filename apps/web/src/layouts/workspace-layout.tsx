@@ -42,7 +42,6 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   Link,
-  Navigate,
   Outlet,
   useLocation,
   useNavigate,
@@ -208,7 +207,10 @@ function EmptyState({ onGoConfig }: { onGoConfig: () => void }) {
   );
 }
 
-const SETUP_COMPLETE_KEY = "nexu_setup_complete";
+// SETUP_COMPLETE_KEY previously gated the workspace behind an onboarding
+// flow that no longer exists after nexu accounts were removed. The
+// localStorage key itself may still be present from older installs and is
+// harmless — nothing reads it now.
 const GITHUB_URL = "https://github.com/nexu-io/nexu";
 function resolveCloudUsageUrl(cloudUrl?: string | null): string {
   if (!cloudUrl) return "https://nexu.io/workspace/usage";
@@ -364,10 +366,12 @@ function UpdateFloatCard({
 }
 
 export function WorkspaceLayout() {
-  if (localStorage.getItem(SETUP_COMPLETE_KEY) !== "1") {
-    return <Navigate to="/" replace />;
-  }
-
+  // Nexu accounts have been removed, so there is no longer a welcome /
+  // onboarding page to gate the workspace behind. Rendering directly avoids
+  // an infinite redirect loop between "/" (which itself points at
+  // /workspace/chat now) and this layout, which otherwise sends the user
+  // back to "/" forever on a fresh install where SETUP_COMPLETE_KEY is
+  // never set.
   return <WorkspaceLayoutInner />;
 }
 
