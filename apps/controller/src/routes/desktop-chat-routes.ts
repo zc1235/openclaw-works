@@ -14,6 +14,11 @@ const DESKTOP_CHANNEL_TYPE = "desktop";
 const DESKTOP_SESSION_PREFIX = "desktop-";
 const HISTORY_MESSAGE_LIMIT = 40;
 
+// Module-scoped encoder — TextEncoder is a value binding in @types/node
+// (no DOM lib is loaded in controller tsconfig), so it cannot be used as a
+// type parameter. Keeping the instance here avoids any type-vs-value dance.
+const sseEncoder = new TextEncoder();
+
 type OpenAiCompatMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
@@ -165,11 +170,8 @@ async function loadHistoryMessages(
   return messages;
 }
 
-function encodeSse(
-  encoder: TextEncoder,
-  event: DesktopStreamEvent,
-): Uint8Array {
-  return encoder.encode(`data: ${JSON.stringify(event)}\n\n`);
+function encodeSse(event: DesktopStreamEvent): Uint8Array {
+  return sseEncoder.encode(`data: ${JSON.stringify(event)}\n\n`);
 }
 
 export function registerDesktopChatRoutes(
@@ -276,7 +278,6 @@ export function registerDesktopChatRoutes(
         }),
       });
 
-      const encoder = new TextEncoder();
       const decoder = new TextDecoder();
 
       if (!upstream.ok || !upstream.body) {
@@ -284,7 +285,7 @@ export function registerDesktopChatRoutes(
         const errorStream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.enqueue(
-              encodeSse(encoder, {
+              encodeSse({
                 type: "session",
                 botId: resolved.botId,
                 sessionKey,
@@ -292,7 +293,7 @@ export function registerDesktopChatRoutes(
               }),
             );
             controller.enqueue(
-              encodeSse(encoder, {
+              encodeSse({
                 type: "error",
                 message:
                   errorText.trim().length > 0
@@ -318,7 +319,7 @@ export function registerDesktopChatRoutes(
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
           controller.enqueue(
-            encodeSse(encoder, {
+            encodeSse({
               type: "session",
               botId: resolved.botId,
               sessionKey,
@@ -329,7 +330,7 @@ export function registerDesktopChatRoutes(
           const reader = upstream.body?.getReader();
           if (!reader) {
             controller.enqueue(
-              encodeSse(encoder, {
+              encodeSse({
                 type: "error",
                 message: "Upstream stream unavailable",
               }),
@@ -353,7 +354,7 @@ export function registerDesktopChatRoutes(
               if (typeof delta === "string" && delta.length > 0) {
                 assistantText += delta;
                 controller.enqueue(
-                  encodeSse(encoder, { type: "delta", text: delta }),
+                  encodeSse({ type: "delta", text: delta }),
                 );
               }
             } catch {
@@ -387,7 +388,7 @@ export function registerDesktopChatRoutes(
           } catch (error) {
             streamFailed = true;
             controller.enqueue(
-              encodeSse(encoder, {
+              encodeSse({
                 type: "error",
                 message: `stream error: ${error instanceof Error ? error.message : String(error)}`,
               }),
@@ -444,7 +445,7 @@ export function registerDesktopChatRoutes(
           }
 
           controller.enqueue(
-            encodeSse(encoder, {
+            encodeSse({
               type: "done",
               provider: resolved.providerKey,
               model: resolved.modelId,
