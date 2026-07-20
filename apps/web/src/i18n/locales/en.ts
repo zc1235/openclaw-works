@@ -683,7 +683,7 @@ const en = {
   // ── Channels Page ──
   "channels.pageTitle": "Channels",
   "channels.pageSubtitle":
-    "Connect your messaging platforms and let nexu 🦞 join your workspace",
+    "Connect your messaging platforms and let 灵光 join your workspace",
   "channels.comingSoon": "Microsoft Teams, Line and more coming soon",
   "channels.backToConfig": "Back to configuration",
   "channels.statusConnected": "{{platform}} Bot Connected",
@@ -1317,9 +1317,9 @@ const en = {
   "desktopChat.newChat": "New chat",
   "desktopChat.agent": "Agent",
   "desktopChat.emptySessions": "No desktop chats yet.",
-  "desktopChat.emptyTitle": "Chat with your agent",
+  "desktopChat.emptyTitle": "Hi, I'm your office assistant",
   "desktopChat.emptyDesc":
-    "Type a message below to start talking to your configured agent right here on the desktop. No Slack or Feishu setup required.",
+    "I can help you draft documents, organize information, write emails, summarize key points, plan your schedule, and handle everyday office tasks. Tell me what you'd like to do in the box below and let's get started.",
   "desktopChat.subtitle": "Talk to your agent directly from the desktop.",
   "desktopChat.inputPlaceholder": "Send a message… (Shift+Enter for newline)",
   "desktopChat.hint": "Enter to send · Shift+Enter for newline",

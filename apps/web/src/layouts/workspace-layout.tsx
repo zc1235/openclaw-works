@@ -900,8 +900,8 @@ function WorkspaceLayoutInner() {
           >
             {isDesktopClient ? (
               <>
-                <span className="text-[16px] font-semibold text-text-primary whitespace-nowrap">
-                  灵光
+                <span className="text-[15px] font-semibold text-text-primary whitespace-nowrap">
+                  灵光办公助手
                 </span>
                 <div className="flex items-center gap-2">
                   {hasUpdate && updateDismissed && (

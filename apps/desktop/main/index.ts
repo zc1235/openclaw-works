@@ -1333,6 +1333,15 @@ function createMainWindow(): BrowserWindow {
     window.setMenuBarVisibility(false);
   }
 
+  // Keep the OS title bar (top-left of the window on Windows) showing the
+  // product name. The web app sets a per-route document.title (e.g. "新建任务
+  // · 灵光"), which would otherwise overwrite the window title — so we pin it
+  // to APP_DISPLAY_NAME and ignore page-driven title updates.
+  window.setTitle(APP_DISPLAY_NAME);
+  window.on("page-title-updated", (event) => {
+    event.preventDefault();
+  });
+
   if (process.platform === "win32") {
     window.setSkipTaskbar(!shellPreferences.showInDock);
   }

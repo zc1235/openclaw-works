@@ -646,7 +646,7 @@ const zhCN = {
 
   // ── Channels Page ──
   "channels.pageTitle": "渠道",
-  "channels.pageSubtitle": "连接你的消息平台，让 nexu 🦞 加入你的工作区",
+  "channels.pageSubtitle": "连接你的消息平台，让灵光加入你的工作区",
   "channels.comingSoon": "Microsoft Teams、Line 等更多平台即将支持",
   "channels.backToConfig": "返回配置",
   "channels.statusConnected": "{{platform}} Bot 已连接",
@@ -1247,9 +1247,9 @@ const zhCN = {
   "desktopChat.newChat": "新建对话",
   "desktopChat.agent": "Agent",
   "desktopChat.emptySessions": "还没有桌面对话",
-  "desktopChat.emptyTitle": "和你的 Agent 直接对话",
+  "desktopChat.emptyTitle": "你好，我是灵光办公助手",
   "desktopChat.emptyDesc":
-    "在下方输入框写点什么，就能在桌面里和已配置的 Agent 聊天，不需要接入飞书或 Slack。",
+    "我可以帮你起草文档、整理资料、撰写邮件、总结要点、安排日程等日常办公事务。在下方输入框告诉我你想做什么，我们现在就开始吧。",
   "desktopChat.subtitle": "直接在桌面里和你的 Agent 对话。",
   "desktopChat.inputPlaceholder": "发送消息…（Shift+Enter 换行）",
   "desktopChat.hint": "Enter 发送 · Shift+Enter 换行",

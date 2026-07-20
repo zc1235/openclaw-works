@@ -29,7 +29,8 @@ export const CURATED_SKILL_SLUGS: readonly string[] = [
   "imap-smtp-email",
   "calendar",
   // Notes & content
-  "apple-notes",
+  // (apple-notes removed: ambiguous slug on ClawHub — the CLI cannot resolve a
+  // specific owner — and it is macOS-only, so it never applied on Windows.)
   "humanize-ai-text",
   // File & system
   "file-organizer-skill",

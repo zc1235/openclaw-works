@@ -59,6 +59,8 @@ type MutableQueueItem = {
   errorCode: QueueErrorCode | null;
   retries: number;
   enqueuedAt: string;
+  /** Best-effort startup auto-install: drop silently on permanent failure. */
+  silent: boolean;
 };
 
 export class InstallQueue {
@@ -105,7 +107,11 @@ export class InstallQueue {
     this.cleanupDelayMs = opts.cleanupDelayMs ?? 60000;
   }
 
-  enqueue(slug: string, source: SkillSource): QueueItem {
+  enqueue(
+    slug: string,
+    source: SkillSource,
+    opts?: { silent?: boolean },
+  ): QueueItem {
     // Dedup: check active, pending, and completed
     const existing = this.findItem(slug);
     if (existing) {
@@ -130,6 +136,7 @@ export class InstallQueue {
       errorCode: null,
       retries: 0,
       enqueuedAt: new Date().toISOString(),
+      silent: opts?.silent ?? false,
     };
 
     this.pending.push(item);
@@ -318,10 +325,18 @@ export class InstallQueue {
           );
 
           if (item.retries >= this.maxRetries) {
+            this.active.delete(item.slug);
+            if (item.silent) {
+              this.log(
+                "warn",
+                `Silent auto-install gave up after retries: ${item.slug}`,
+              );
+              this.drain();
+              return;
+            }
             item.status = "failed";
             item.error = message;
             item.errorCode = code;
-            this.active.delete(item.slug);
             this.completed.push(item);
             // Failed items are retained so the UI can render a failed card
             // with a Retry affordance. Eviction happens only when the user
@@ -337,13 +352,25 @@ export class InstallQueue {
           this.pending.unshift(item);
           this.pauseQueue(pauseMs);
         } else {
+          this.active.delete(item.slug);
+          if (item.silent) {
+            // Best-effort startup auto-install (curated skill). Drop silently
+            // on permanent errors — removed / renamed / unavailable on ClawHub,
+            // or an ambiguous/invalid slug the CLI can't resolve — instead of
+            // surfacing a scary failed card the user never asked for.
+            this.log(
+              "warn",
+              `Silent auto-install skipped for ${item.slug}: ${message}`,
+            );
+            this.drain();
+            return;
+          }
           // Non-rate-limit error: fail immediately. Retain the item so the
           // UI shows a failed card with Retry; eviction happens on user
           // retry (re-enqueue) or explicit cancel.
           item.status = "failed";
           item.errorCode = code;
           item.error = message;
-          this.active.delete(item.slug);
           this.completed.push(item);
           this.log("error", `Install failed for ${item.slug}: ${message}`);
           this.drain();

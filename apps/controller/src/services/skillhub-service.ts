@@ -189,7 +189,10 @@ export class SkillhubService {
     const toEnqueue = this.catalogManager.getCuratedSlugsToEnqueue();
     for (const slug of toEnqueue) {
       const canonical = this.catalogManager.canonicalizeSlug(slug);
-      this.installQueue.enqueue(canonical, "managed");
+      // Startup auto-install is best-effort: if a curated skill can't be
+      // resolved on ClawHub (removed/renamed/ambiguous/invalid slug), skip it
+      // silently instead of surfacing a failed card the user never asked for.
+      this.installQueue.enqueue(canonical, "managed", { silent: true });
     }
   }
 

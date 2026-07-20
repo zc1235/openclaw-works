@@ -1358,7 +1358,6 @@ export function ModelsPage() {
         </div>
 
         <div className="space-y-6">
-          <_GeneralSettings />
           <div className="space-y-6">
             <div className="rounded-xl border border-border bg-surface-1 px-4 py-3.5">
               <div className="flex items-center justify-between gap-4">
@@ -1621,6 +1620,7 @@ export function ModelsPage() {
               </div>
             </div>
           </div>
+          <_GeneralSettings />
         </div>
       </div>
     </div>

@@ -955,7 +955,7 @@ export class NexuConfigStore {
 
     const config = await this.getConfig();
     const bot = await this.createBot({
-      name: "nexu Assistant",
+      name: "idea agent",
       slug: "nexu-assistant",
       modelId: config.runtime.defaultModelId,
     });

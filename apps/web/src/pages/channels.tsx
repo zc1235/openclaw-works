@@ -24,7 +24,6 @@ import {
   Loader2,
   RotateCcw,
   Shield,
-  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -194,12 +193,6 @@ export function ChannelsPage() {
             </button>
           );
         })}
-      </div>
-
-      {/* Coming soon */}
-      <div className="flex gap-1.5 items-center mb-4 text-[11px] text-text-muted flex-wrap">
-        <Zap size={10} className="text-accent" />
-        {t("channels.comingSoon")}
       </div>
 
       {quotaLimited && !isConfigured && <QuotaBanner resetsAt={resetsAt} />}
