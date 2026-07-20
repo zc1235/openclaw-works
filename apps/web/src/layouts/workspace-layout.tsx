@@ -61,6 +61,7 @@ import {
 
 interface SidebarSession {
   id: string;
+  sessionKey: string;
   title: string;
   channelType: string;
   lastTime: string | null;
@@ -102,6 +103,7 @@ export function getSidebarCreditBreakdown(input: {
 
 function mapDbSession(s: {
   id: string;
+  sessionKey?: string | null;
   title: string;
   channelType?: string | null;
   lastMessageAt?: string | null;
@@ -110,6 +112,7 @@ function mapDbSession(s: {
 }): SidebarSession {
   return {
     id: s.id,
+    sessionKey: s.sessionKey ?? "",
     title: s.title,
     channelType: s.channelType ?? "web",
     lastTime: s.lastMessageAt ?? s.updatedAt ?? null,
@@ -700,6 +703,8 @@ function WorkspaceLayoutInner() {
 
   const sessionMatch = location.pathname.match(/\/workspace\/sessions\/(.+)/);
   const selectedSessionId = sessionMatch?.[1] ?? null;
+  const chatMatch = location.pathname.match(/\/workspace\/chat\/(.+)/);
+  const selectedChatKey = chatMatch?.[1] ?? null;
   const isHomePage =
     location.pathname === "/workspace" ||
     location.pathname === "/workspace/home";
@@ -1012,7 +1017,13 @@ function WorkspaceLayoutInner() {
             </div>
             <div className="space-y-0.5">
               {sessions.map((s) => {
-                const isActive = selectedSessionId === s.id;
+                // Desktop chats (New Task) reopen in the interactive chat view;
+                // IM sessions open the read-only transcript.
+                const isDesktopChat =
+                  s.channelType === "desktop" && s.sessionKey.length > 0;
+                const isActive = isDesktopChat
+                  ? selectedChatKey === s.sessionKey
+                  : selectedSessionId === s.id;
                 return (
                   <SidebarSessionRow
                     key={s.id}
@@ -1027,7 +1038,11 @@ function WorkspaceLayoutInner() {
                         target: "conversations",
                         ...(channel ? { channel } : {}),
                       });
-                      navigate(`/workspace/sessions/${s.id}`);
+                      if (isDesktopChat) {
+                        navigate(`/workspace/chat/${s.sessionKey}`);
+                      } else {
+                        navigate(`/workspace/sessions/${s.id}`);
+                      }
                     }}
                   />
                 );
