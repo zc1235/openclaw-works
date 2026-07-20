@@ -159,6 +159,33 @@ export function useImportSkill() {
   });
 }
 
+export function useImportSkillFolder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (folderPath: string) => {
+      const response = await fetch("/api/v1/skillhub/import-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: folderPath }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        ok: boolean;
+        slug?: string;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error ?? "Import failed");
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CATALOG_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: DETAIL_QUERY_KEY }),
+      ]);
+      return result;
+    },
+  });
+}
+
 export function useRefreshCatalog() {
   const queryClient = useQueryClient();
 

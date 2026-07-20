@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   app,
   crashReporter,
+  dialog,
   ipcMain,
   shell,
   webContents,
@@ -724,6 +725,28 @@ export function registerIpcHandlers(
             ok: true,
           };
 
+          return result;
+        }
+
+        case "desktop:pick-skill-folder": {
+          const parentWindow =
+            BrowserWindow.fromWebContents(_event.sender) ??
+            BrowserWindow.getAllWindows()[0];
+          const dialogResult = parentWindow
+            ? await dialog.showOpenDialog(parentWindow, {
+                properties: ["openDirectory"],
+                title: "Select a skill folder",
+              })
+            : await dialog.showOpenDialog({
+                properties: ["openDirectory"],
+                title: "Select a skill folder",
+              });
+          const result: HostInvokeResultMap["desktop:pick-skill-folder"] = {
+            path:
+              dialogResult.canceled || dialogResult.filePaths.length === 0
+                ? null
+                : (dialogResult.filePaths[0] ?? null),
+          };
           return result;
         }
 

@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { app } from "electron";
-import { getDesktopNexuHomeDir } from "../shared/desktop-paths";
+import {
+  getDesktopNexuHomeDir,
+  getLegacyHomeNexuDir,
+} from "../shared/desktop-paths";
 import { resolveRuntimePlatform } from "./platforms/platform-resolver";
 import { resolveNonWindowsPackagedUserDataPath } from "./platforms/shared/packaged-user-data-path";
 import { resolveWindowsPackagedUserDataPath } from "./platforms/windows/user-data-path";
@@ -139,19 +142,26 @@ function configurePackagedPaths(): void {
   const sessionDataPath = join(effectiveUserDataPath, "session");
   const logsPath = join(effectiveUserDataPath, "logs");
   const nexuHomePath = getDesktopNexuHomeDir(effectiveUserDataPath);
+  // Config/data used to live in ~/.nexu (and, even earlier, in
+  // <userData>/.nexu). It now lives in ~/.lingguang. Prefer migrating from the
+  // most recent previous home (~/.nexu) and fall back to the old packaged one.
+  const legacyHomeNexuPath = getLegacyHomeNexuDir();
   const legacyPackagedNexuHomePath = getLegacyPackagedNexuHomeDir(
     effectiveUserDataPath,
   );
+  const legacyNexuHomePath = existsSync(legacyHomeNexuPath)
+    ? legacyHomeNexuPath
+    : legacyPackagedNexuHomePath;
 
   mkdirSync(effectiveUserDataPath, { recursive: true });
   mkdirSync(sessionDataPath, { recursive: true });
   mkdirSync(logsPath, { recursive: true });
   mkdirSync(nexuHomePath, { recursive: true });
 
-  if (legacyPackagedNexuHomePath !== nexuHomePath) {
+  if (legacyNexuHomePath !== nexuHomePath) {
     migrateNexuHomeFromUserData({
       targetNexuHome: nexuHomePath,
-      sourceNexuHome: legacyPackagedNexuHomePath,
+      sourceNexuHome: legacyNexuHomePath,
       log: (message) => {
         safeWrite(
           process.stdout,

@@ -119,6 +119,66 @@ function extractZipArchive(zipPath: string, destDir: string): void {
   }
 }
 
+/**
+ * Install a skill from a local folder on disk. Accepts either the skill folder
+ * itself (contains SKILL.md) or a parent folder containing exactly one skill
+ * subfolder with a SKILL.md. Copies it into `skillsDir/<slug>`.
+ */
+export function importSkillFolder(
+  sourceDir: string,
+  skillsDir: string,
+): ZipImportResult {
+  try {
+    const abs = resolve(sourceDir);
+    if (!existsSync(abs)) {
+      return { ok: false, error: "Folder does not exist" };
+    }
+
+    // Accept the skill folder directly, or a parent that wraps a single skill.
+    let skillRoot = abs;
+    if (!existsSync(resolve(abs, "SKILL.md"))) {
+      const subEntries = readdirSync(abs, { withFileTypes: true }).filter(
+        (entry) => entry.isDirectory() && !entry.name.startsWith("."),
+      );
+      const only = subEntries.length === 1 ? subEntries[0] : undefined;
+      if (only && existsSync(resolve(abs, only.name, "SKILL.md"))) {
+        skillRoot = resolve(abs, only.name);
+      }
+    }
+
+    if (!existsSync(resolve(skillRoot, "SKILL.md"))) {
+      return { ok: false, error: "Folder must contain a SKILL.md" };
+    }
+
+    let slug = basename(skillRoot);
+    if (!isValidSlug(slug)) {
+      slug = slugify(slug);
+    }
+    if (!slug || !isValidSlug(slug)) {
+      return {
+        ok: false,
+        error: "Could not derive a valid slug from the folder name",
+      };
+    }
+
+    const destDir = resolve(skillsDir, slug);
+    // If the folder is already the installed skill, nothing to copy.
+    if (resolve(skillRoot) === destDir) {
+      return { ok: true, slug };
+    }
+    if (existsSync(destDir)) {
+      rmSync(destDir, { recursive: true, force: true });
+    }
+    mkdirSync(destDir, { recursive: true });
+    cpSync(skillRoot, destDir, { recursive: true });
+
+    return { ok: true, slug };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: `Folder import failed: ${message}` };
+  }
+}
+
 export function importSkillZip(
   zipBuffer: Buffer,
   skillsDir: string,

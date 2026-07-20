@@ -794,8 +794,13 @@ const en = {
   "skills.import": "Import",
   "skills.importSkill": "Import Skill",
   "skills.importSkillDesc":
-    "Add a custom skill from a zip file or GitHub repository",
+    "Add a custom skill from a zip file or a local folder",
   "skills.uploadZip": "Upload Zip",
+  "skills.localFolder": "Local Folder",
+  "skills.browseFolder": "Choose a skill folder",
+  "skills.noFolderSelected": "No folder selected",
+  "skills.folderHint":
+    "Pick a folder that contains a SKILL.md (or a parent folder with a single skill inside). It's copied in directly — no network needed.",
   "skills.githubLink": "GitHub Link",
   "skills.importSuccess": "Skill imported successfully",
   "skills.importFailed": "Import failed",

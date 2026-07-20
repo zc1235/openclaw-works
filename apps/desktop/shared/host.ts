@@ -45,6 +45,7 @@ export const hostInvokeChannels = [
   "component:install",
   "setup:animation-complete",
   "app:quit",
+  "desktop:pick-skill-folder",
 ] as const;
 
 export type HostInvokeChannel = (typeof hostInvokeChannels)[number];
@@ -79,6 +80,7 @@ export type StartupProbePayload = {
 };
 
 export type HostInvokePayloadMap = {
+  "desktop:pick-skill-folder": undefined;
   "app:get-info": undefined;
   "diagnostics:get-info": undefined;
   "diagnostics:crash-main": undefined;
@@ -167,6 +169,7 @@ export type HostInvokePayloadMap = {
 };
 
 export type HostInvokeResultMap = {
+  "desktop:pick-skill-folder": { path: string | null };
   "app:get-info": AppInfo;
   "diagnostics:get-info": DiagnosticsInfo;
   "diagnostics:crash-main": undefined;

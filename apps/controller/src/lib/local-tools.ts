@@ -54,6 +54,17 @@ export interface LocalToolExecutionResult {
   ok: boolean;
 }
 
+/**
+ * Per-call options threaded through tool execution. Currently used to pin the
+ * working directory of `run_command` (and to answer `get_workspace_directory`)
+ * to a per-conversation workspace folder so each chat's generated files land in
+ * their own directory instead of a shared one.
+ */
+export interface LocalToolOptions {
+  /** Absolute path to this conversation's workspace directory, if any. */
+  workspaceDir?: string;
+}
+
 /** Expand a leading `~` to the user's home directory. */
 function expandUser(p: string): string {
   if (!p) return p;
@@ -97,6 +108,19 @@ export const LOCAL_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
       name: "get_desktop_path",
       description:
         "Return the absolute path of the current user's Desktop folder.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_workspace_directory",
+      description:
+        "Return the absolute path of the current conversation's workspace folder. Files you create for this conversation (via run_command) should be written here so they are easy to find later. This is also the working directory that run_command runs in by default.",
       parameters: {
         type: "object",
         properties: {},
@@ -254,6 +278,7 @@ async function toolReadFile(
 
 async function toolRunCommand(
   args: Record<string, unknown>,
+  opts?: LocalToolOptions,
 ): Promise<LocalToolExecutionResult> {
   const command = typeof args.command === "string" ? args.command : "";
   if (!command.trim()) {
@@ -267,6 +292,9 @@ async function toolRunCommand(
       timeout: MAX_COMMAND_TIMEOUT_MS,
       maxBuffer: MAX_COMMAND_OUTPUT_BYTES * 2,
       windowsHide: true,
+      // Run inside this conversation's workspace folder so files the command
+      // creates land in a per-conversation directory instead of a shared one.
+      ...(opts?.workspaceDir ? { cwd: opts.workspaceDir } : {}),
     });
     const combined = [stdout, stderr].filter(Boolean).join("\n").trim();
     return {
@@ -288,12 +316,20 @@ async function toolRunCommand(
 export async function executeLocalTool(
   name: string,
   args: Record<string, unknown>,
+  opts?: LocalToolOptions,
 ): Promise<LocalToolExecutionResult> {
   switch (name) {
     case "get_home_directory":
       return { ok: true, content: homedir() };
     case "get_desktop_path":
       return { ok: true, content: getDesktopPath() };
+    case "get_workspace_directory":
+      return {
+        ok: true,
+        content:
+          opts?.workspaceDir ??
+          "No dedicated workspace directory is configured for this conversation; files will be created relative to the app's working directory.",
+      };
     case "get_platform_info":
       return {
         ok: true,
@@ -309,7 +345,7 @@ export async function executeLocalTool(
     case "read_file":
       return toolReadFile(args);
     case "run_command":
-      return toolRunCommand(args);
+      return toolRunCommand(args, opts);
     default:
       return { ok: false, content: `Unknown tool: ${name}` };
   }
@@ -333,6 +369,8 @@ export function summariseToolCall(
       return typeof args.command === "string"
         ? `run_command: ${args.command.slice(0, 80)}`
         : "run_command";
+    case "get_workspace_directory":
+      return "get_workspace_directory";
     default:
       return name;
   }

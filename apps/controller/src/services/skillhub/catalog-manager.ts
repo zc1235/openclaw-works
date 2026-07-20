@@ -29,7 +29,10 @@ import type {
   SkillSource,
   SkillhubCatalogData,
 } from "./types.js";
-import { importSkillZip as extractZip } from "./zip-importer.js";
+import {
+  importSkillZip as extractZip,
+  importSkillFolder as extractFolder,
+} from "./zip-importer.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -704,6 +707,52 @@ export class CatalogManager {
 
     this.db.recordInstall(slug, "custom");
     this.log("info", `custom skill imported: ${slug}`);
+    return { ok: true, slug };
+  }
+
+  /**
+   * Install a skill from a local folder on disk (no ClawHub / network needed).
+   * Mirrors {@link importSkillZip}: copy → install deps → record in DB.
+   */
+  async importSkillFolder(sourcePath: string): Promise<{
+    ok: boolean;
+    slug?: string;
+    error?: string;
+    errorCode?: QueueErrorCode;
+  }> {
+    this.log("info", `importing custom skill from folder: ${sourcePath}`);
+    const result = extractFolder(sourcePath, this.skillsDir);
+    if (!result.ok || !result.slug) {
+      this.log("error", `custom folder import failed: ${result.error}`);
+      return result;
+    }
+
+    const slug = result.slug;
+    const skillDir = resolve(this.skillsDir, slug);
+    try {
+      await this.installSkillDeps(skillDir, slug);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const errorCode = classifyError(message);
+      try {
+        rmSync(skillDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        const cleanupMsg =
+          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        this.log(
+          "warn",
+          `custom folder cleanup failed slug=${slug}: ${cleanupMsg}`,
+        );
+      }
+      this.log(
+        "error",
+        `custom folder deps failed slug=${slug} code=${errorCode}: ${message}`,
+      );
+      return { ok: false, error: message, errorCode };
+    }
+
+    this.db.recordInstall(slug, "custom");
+    this.log("info", `custom skill imported from folder: ${slug}`);
     return { ok: true, slug };
   }
 

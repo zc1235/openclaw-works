@@ -481,4 +481,49 @@ export function registerSkillhubRoutes(
       return c.json(result, 200);
     },
   );
+
+  // POST /api/v1/skillhub/import-folder — install a skill from a local folder
+  app.openapi(
+    createRoute({
+      method: "post",
+      path: "/api/v1/skillhub/import-folder",
+      tags: ["SkillHub"],
+      request: {
+        body: {
+          content: {
+            "application/json": {
+              schema: z.object({ path: z.string().min(1) }),
+            },
+          },
+          required: true,
+        },
+      },
+      responses: {
+        200: {
+          content: {
+            "application/json": { schema: skillhubImportResultSchema },
+          },
+          description: "Import result",
+        },
+        400: {
+          content: {
+            "application/json": { schema: skillhubImportResultSchema },
+          },
+          description: "Import rejected or failed",
+        },
+      },
+    }),
+    async (c) => {
+      const { path: folderPath } = c.req.valid("json");
+      const result =
+        await container.skillhubService.catalog.importSkillFolder(folderPath);
+
+      if (!result.ok) {
+        return c.json(result, 400);
+      }
+
+      await container.openclawSyncService.syncAll();
+      return c.json(result, 200);
+    },
+  );
 }

@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 describe("desktop nexu home paths", () => {
-  it("resolves packaged nexu home to ~/.nexu instead of userData/.nexu", () => {
+  it("resolves packaged nexu home to ~/.lingguang instead of userData/.lingguang", () => {
     const userDataPath = join(
       tempDir,
       "Library",
@@ -43,10 +43,10 @@ describe("desktop nexu home paths", () => {
       "desktop",
     );
     expect(getDesktopNexuHomeDir(userDataPath)).toBe(
-      join(process.env.HOME ?? "", ".nexu"),
+      join(process.env.HOME ?? "", ".lingguang"),
     );
     expect(getDesktopNexuHomeDir(userDataPath)).not.toBe(
-      join(userDataPath, ".nexu"),
+      join(userDataPath, ".lingguang"),
     );
   });
 

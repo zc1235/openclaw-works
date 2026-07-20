@@ -56,9 +56,31 @@ export function pathToFileUrl(path: string): string {
   return `file://${encodeURI(normalized)}`;
 }
 
+function getSessionWorkspacePath(
+  metadata: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!metadata) {
+    return null;
+  }
+
+  const workspaceValue = metadata.workspacePath;
+  return typeof workspaceValue === "string" &&
+    workspaceValue.trim().length > 0
+    ? workspaceValue
+    : null;
+}
+
 export function getSessionFolderUrl(
   metadata: Record<string, unknown> | null | undefined,
 ): string | null {
+  // Prefer the dedicated per-conversation workspace directory when present —
+  // this is already a folder, so it can be opened directly.
+  const workspacePath = getSessionWorkspacePath(metadata);
+  if (workspacePath) {
+    return pathToFileUrl(workspacePath);
+  }
+
+  // Legacy fallback: derive the parent folder of a stored file path.
   const filePath = getSessionMetadataPath(metadata);
   if (!filePath) {
     return null;

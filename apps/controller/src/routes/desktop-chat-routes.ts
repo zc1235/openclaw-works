@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
 import { type OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import {
   type DesktopStreamEvent,
@@ -97,6 +100,52 @@ function extractCompatMessageText(content: unknown): string {
 function generateDesktopSessionKey(): string {
   const random = Math.random().toString(36).slice(2, 10);
   return `${DESKTOP_SESSION_PREFIX}${Date.now().toString(36)}-${random}`;
+}
+
+/**
+ * Root folder that holds one sub-directory per conversation. Lives under the
+ * user's home directory so files a chat produces are easy to browse (and can
+ * be opened directly from the "Open workspace" task action).
+ */
+const WORKSPACE_ROOT_DIR_NAME = "Lingguang";
+const WORKSPACE_CONVERSATIONS_DIR_NAME = "conversations";
+
+/**
+ * Sanitise a session key into something safe to use as a single path segment
+ * (session keys are already URL-safe, but guard against separators just in
+ * case a custom key is supplied).
+ */
+function sanitizeWorkspaceSegment(sessionKey: string): string {
+  const cleaned = sessionKey.replace(/[^a-zA-Z0-9._-]/gu, "-");
+  return cleaned.length > 0 ? cleaned : "default";
+}
+
+/**
+ * Compute (and create) the per-conversation workspace directory. Returns the
+ * absolute path, or null if the directory could not be created — callers then
+ * fall back to the previous shared-directory behaviour.
+ */
+async function ensureWorkspaceDir(sessionKey: string): Promise<string | null> {
+  const dir = path.join(
+    homedir(),
+    WORKSPACE_ROOT_DIR_NAME,
+    WORKSPACE_CONVERSATIONS_DIR_NAME,
+    sanitizeWorkspaceSegment(sessionKey),
+  );
+  try {
+    await mkdir(dir, { recursive: true });
+    return dir;
+  } catch (error) {
+    logger.warn(
+      {
+        route: "desktopChat.messages",
+        sessionKey,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "failed to create conversation workspace directory",
+    );
+    return null;
+  }
 }
 
 function deriveTitleFromText(text: string): string {
@@ -447,6 +496,10 @@ export function registerDesktopChatRoutes(
             ? existingTitle
             : derivedTitle;
 
+      // Each conversation gets its own workspace folder so the files a chat
+      // produces are grouped together and can be opened from the task list.
+      const workspaceDir = await ensureWorkspaceDir(sessionKey);
+
       const historyMessages: OpenAiChatMessage[] = isNewSession
         ? []
         : await loadHistoryMessages(container, resolved.botId, sessionKey);
@@ -454,8 +507,19 @@ export function registerDesktopChatRoutes(
       if (resolved.systemPrompt) {
         outgoing.push({ role: "system", content: resolved.systemPrompt });
       }
+      if (workspaceDir) {
+        outgoing.push({
+          role: "system",
+          content:
+            `This conversation has a dedicated workspace directory at: ${workspaceDir}\n` +
+            "When you create files for the user, write them here (run_command runs in this directory by default). " +
+            "Use get_workspace_directory if you need the absolute path.",
+        });
+      }
       outgoing.push(...historyMessages);
       outgoing.push({ role: "user", content: body.text });
+
+      const localToolOptions = workspaceDir ? { workspaceDir } : undefined;
 
       const stream = new ReadableStream<Uint8Array>({
         async start(sseController) {
@@ -523,6 +587,7 @@ export function registerDesktopChatRoutes(
               const execution = await executeLocalTool(
                 toolCall.function.name,
                 args,
+                localToolOptions,
               );
               runningMessages.push({
                 role: "tool",
@@ -542,7 +607,10 @@ export function registerDesktopChatRoutes(
                 title: persistTitle,
                 channelType: DESKTOP_CHANNEL_TYPE,
                 channelId: null,
-                metadata: { source: "desktop-native-chat" },
+                metadata: {
+                  source: "desktop-native-chat",
+                  ...(workspaceDir ? { workspacePath: workspaceDir } : {}),
+                },
                 userText: body.text,
                 assistantText: trimmedAssistant,
                 provider: resolved.providerKey,

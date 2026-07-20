@@ -11,9 +11,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useImportSkill } from "@/hooks/use-community-catalog";
+import {
+  useImportSkill,
+  useImportSkillFolder,
+} from "@/hooks/use-community-catalog";
 import { track } from "@/lib/tracking";
-import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
+import { AlertCircle, CheckCircle2, FolderOpen, Lock } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -21,7 +24,28 @@ import {
   getSelectedZipFile,
 } from "./import-skill-modal-state";
 
-type ImportTab = "zip" | "github";
+type ImportTab = "zip" | "folder" | "github";
+
+type SkillFolderPickerBridge = {
+  invoke: (channel: string, payload?: unknown) => Promise<unknown>;
+};
+
+async function pickSkillFolder(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const host = (window as Window & { nexuHost?: unknown }).nexuHost as
+    | SkillFolderPickerBridge
+    | undefined;
+  if (!host || typeof host.invoke !== "function") return null;
+  try {
+    const result = (await host.invoke(
+      "desktop:pick-skill-folder",
+      undefined,
+    )) as { path?: string | null } | null;
+    return result?.path ?? null;
+  } catch {
+    return null;
+  }
+}
 
 interface ImportSkillModalProps {
   open: boolean;
@@ -37,18 +61,22 @@ export default function ImportSkillModal({
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [done, setDone] = useState(false);
+  const [folderPath, setFolderPath] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoCloseControllerRef = useRef(createAutoCloseController());
   const importMutation = useImportSkill();
+  const folderImportMutation = useImportSkillFolder();
 
   const reset = useCallback(() => {
     autoCloseControllerRef.current.cancel();
     setTab("zip");
     setDragOver(false);
     setSelectedFile(null);
+    setFolderPath("");
     setDone(false);
     importMutation.reset();
-  }, [importMutation]);
+    folderImportMutation.reset();
+  }, [importMutation, folderImportMutation]);
 
   useEffect(() => {
     return () => {
@@ -79,21 +107,48 @@ export default function ImportSkillModal({
     setSelectedFile(getSelectedZipFile(file));
   };
 
+  const handleBrowseFolder = async () => {
+    const picked = await pickSkillFolder();
+    if (picked) {
+      setFolderPath(picked);
+      folderImportMutation.reset();
+    }
+  };
+
+  const finishSuccess = (slug: string | undefined) => {
+    track("workspace_skill_install", {
+      skill_name: slug ?? "unknown_skill",
+      skill_source: "custom",
+      success: true,
+    });
+    track("workspace_skill_enable", {
+      name: slug ?? "unknown_skill",
+      skill_source: "custom",
+    });
+    setDone(true);
+    autoCloseControllerRef.current.schedule(handleClose, 1200);
+  };
+
   const handleImport = async () => {
+    if (tab === "folder") {
+      if (!folderPath) return;
+      try {
+        const result = await folderImportMutation.mutateAsync(folderPath);
+        finishSuccess(result.slug);
+      } catch {
+        track("workspace_skill_install", {
+          skill_name: "unknown_skill",
+          skill_source: "custom",
+          success: false,
+        });
+      }
+      return;
+    }
+
     if (!selectedFile) return;
     try {
       const result = await importMutation.mutateAsync(selectedFile);
-      track("workspace_skill_install", {
-        skill_name: result.slug ?? "unknown_skill",
-        skill_source: "custom",
-        success: true,
-      });
-      track("workspace_skill_enable", {
-        name: result.slug ?? "unknown_skill",
-        skill_source: "custom",
-      });
-      setDone(true);
-      autoCloseControllerRef.current.schedule(handleClose, 1200);
+      finishSuccess(result.slug);
     } catch {
       track("workspace_skill_install", {
         skill_name: "unknown_skill",
@@ -134,6 +189,12 @@ export default function ImportSkillModal({
               className="rounded-full px-4 py-1.5 text-[13px] font-medium text-text-secondary transition-all data-[state=active]:bg-white data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
             >
               {t("skills.uploadZip")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="folder"
+              className="rounded-full px-4 py-1.5 text-[13px] font-medium text-text-secondary transition-all data-[state=active]:bg-white data-[state=active]:text-text-primary data-[state=active]:shadow-sm"
+            >
+              {t("skills.localFolder")}
             </TabsTrigger>
             <TabsTrigger
               value="github"
@@ -226,6 +287,75 @@ export default function ImportSkillModal({
             </DialogBody>
           </TabsContent>
 
+          <TabsContent value="folder" className="mt-4">
+            <DialogBody className="px-0">
+              {done ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                  <CheckCircle2
+                    size={32}
+                    className="text-[var(--color-success)]"
+                  />
+                  <p className="text-[14px] font-medium text-text-primary">
+                    {t("skills.importSuccess")}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => void handleBrowseFolder()}
+                    className={`w-full flex flex-col items-center justify-center gap-1.5 py-10 rounded-[12px] border border-dashed cursor-pointer transition-colors ${
+                      folderPath
+                        ? "border-[var(--color-success)] bg-[var(--color-success)]/5"
+                        : "border-border-strong hover:border-text-muted hover:bg-surface-1"
+                    }`}
+                  >
+                    <FolderOpen size={20} className="text-text-muted" />
+                    {folderPath ? (
+                      <>
+                        <p className="text-[13px] font-medium text-text-primary break-all px-4 text-center">
+                          {folderPath}
+                        </p>
+                        <p className="text-[11px] text-text-muted">
+                          {t("skills.clickToChange")}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[13px] font-medium text-text-primary">
+                          {t("skills.browseFolder")}
+                        </p>
+                        <p className="text-[11px] text-text-muted">
+                          {t("skills.noFolderSelected")}
+                        </p>
+                      </>
+                    )}
+                  </button>
+                  {folderImportMutation.isError && (
+                    <div className="flex items-start gap-1.5 mt-3">
+                      <AlertCircle
+                        size={12}
+                        className="text-red-500 shrink-0 mt-0.5"
+                      />
+                      <p className="text-[11px] text-red-500 leading-relaxed">
+                        {folderImportMutation.error?.message ?? "Import failed"}
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-1.5 mt-3">
+                    <AlertCircle
+                      size={12}
+                      className="text-text-muted shrink-0 mt-0.5"
+                    />
+                    <p className="text-[11px] text-text-muted leading-relaxed">
+                      {t("skills.folderHint")}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </DialogBody>
+          </TabsContent>
+
           <TabsContent value="github" className="mt-4">
             <DialogBody className="px-0">
               <div>
@@ -259,10 +389,14 @@ export default function ImportSkillModal({
             <Button
               onClick={handleImport}
               disabled={
-                tab === "github" || !selectedFile || importMutation.isPending
+                tab === "github" ||
+                (tab === "zip" &&
+                  (!selectedFile || importMutation.isPending)) ||
+                (tab === "folder" &&
+                  (!folderPath || folderImportMutation.isPending))
               }
             >
-              {importMutation.isPending
+              {importMutation.isPending || folderImportMutation.isPending
                 ? t("skills.importing")
                 : t("skills.import")}
             </Button>
