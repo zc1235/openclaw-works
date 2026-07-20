@@ -6,7 +6,6 @@ import { QqbotSetupView } from "@/components/channel-setup/qqbot-setup-view";
 import { TelegramSetupView } from "@/components/channel-setup/telegram-setup-view";
 import { WechatSetupView } from "@/components/channel-setup/wechat-setup-view";
 import { WecomSetupView } from "@/components/channel-setup/wecom-setup-view";
-import { WhatsappSetupView } from "@/components/channel-setup/whatsapp-setup-view";
 import { GitHubStarCta } from "@/components/github-star-cta";
 import { InlineModelSelector } from "@/components/inline-model-selector";
 import {
@@ -15,7 +14,6 @@ import {
   TelegramIcon,
   WechatIcon,
   WecomIcon,
-  WhatsAppIcon,
 } from "@/components/platform-icons";
 import {
   SEEDANCE_PROMO_DISMISS_KEY,
@@ -142,7 +140,6 @@ const DINGTALK_ICON = <DingtalkIcon size={16} />;
 const QQBOT_ICON = <QqbotIcon size={16} />;
 const TELEGRAM_ICON = <TelegramIcon size={16} />;
 const WECOM_ICON = <WecomIcon size={16} />;
-const WHATSAPP_ICON = <WhatsAppIcon size={16} />;
 /** WeChat mark uses a wide viewBox; bump px so it matches visual weight of 16px square logos. */
 type HomeChannelIconBox = "standard" | "compact";
 
@@ -161,12 +158,6 @@ const ONBOARDING_CHANNELS = [
     id: "wechat",
     name: "WeChat",
     recommended: true,
-  },
-  {
-    id: "whatsapp",
-    name: "WhatsApp",
-    icon: WHATSAPP_ICON,
-    recommended: false,
   },
   {
     id: "telegram",
@@ -218,12 +209,6 @@ function getChannelOptions(t: (key: string) => string) {
       id: "wechat",
       name: t("home.channel.wechat"),
       recommended: true,
-    },
-    {
-      id: "whatsapp",
-      name: t("home.channel.whatsapp"),
-      icon: WHATSAPP_ICON,
-      recommended: false,
     },
     {
       id: "telegram",
@@ -369,7 +354,6 @@ export function HomePage() {
   );
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
-  const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [dingtalkOpen, setDingtalkOpen] = useState(false);
   const [qqbotOpen, setQqbotOpen] = useState(false);
   const [wecomOpen, setWecomOpen] = useState(false);
@@ -765,7 +749,7 @@ export function HomePage() {
               className="text-[26px] font-normal tracking-tight text-text-primary mb-1.5"
               style={{ fontFamily: "var(--font-script)" }}
             >
-              nexu alpha
+              灵光办公助手
             </h2>
             <div className="flex items-center gap-3 text-[11px] text-text-muted">
               <span
@@ -821,8 +805,6 @@ export function HomePage() {
                         setWechatQrOpen(true);
                       } else if (ch.id === "telegram") {
                         setTelegramOpen(true);
-                      } else if (ch.id === "whatsapp") {
-                        setWhatsappOpen(true);
                       } else if (ch.id === "dingtalk") {
                         setDingtalkOpen(true);
                       } else if (ch.id === "qqbot") {
@@ -900,15 +882,6 @@ export function HomePage() {
           />
         )}
 
-        {whatsappOpen && (
-          <WhatsappModal
-            onClose={() => setWhatsappOpen(false)}
-            onConnected={() => {
-              setWhatsappOpen(false);
-              void handleConnected();
-            }}
-          />
-        )}
         {budgetBannerDebugPanel}
 
         {qqbotOpen && (
@@ -984,7 +957,7 @@ export function HomePage() {
                 className="text-[26px] font-normal tracking-tight text-text-primary"
                 style={{ fontFamily: "var(--font-script)" }}
               >
-                nexu alpha
+                灵光办公助手
               </h2>
               <span
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
@@ -1116,7 +1089,7 @@ export function HomePage() {
                       key={ch.id}
                       role={channelChatUrl ? "button" : undefined}
                       tabIndex={channelChatUrl ? 0 : undefined}
-                      className="flex w-full items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-left transition-all hover:bg-surface-1"
+                      className="flex w-full flex-row flex-nowrap items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-left transition-all hover:bg-surface-1"
                       onClick={handleOpenChannel}
                       onKeyDown={(event) => {
                         if (!channelChatUrl) {
@@ -1132,7 +1105,7 @@ export function HomePage() {
                         {homeChannelIcon(ch)}
                       </div>
                       <div className="flex-1 min-w-0 flex items-center gap-2">
-                        <span className="text-[13px] font-semibold text-text-primary">
+                        <span className="truncate text-[13px] font-semibold text-text-primary">
                           {ch.name}
                         </span>
                         <span
@@ -1233,8 +1206,6 @@ export function HomePage() {
                         setWechatQrOpen(true);
                       } else if (ch.id === "telegram") {
                         setTelegramOpen(true);
-                      } else if (ch.id === "whatsapp") {
-                        setWhatsappOpen(true);
                       } else if (ch.id === "dingtalk") {
                         setDingtalkOpen(true);
                       } else if (ch.id === "qqbot") {
@@ -1309,15 +1280,6 @@ export function HomePage() {
         />
       )}
 
-      {whatsappOpen && (
-        <WhatsappModal
-          onClose={() => setWhatsappOpen(false)}
-          onConnected={() => {
-            setWhatsappOpen(false);
-            void handleConnected();
-          }}
-        />
-      )}
       {budgetBannerDebugPanel}
 
       {qqbotOpen && (
@@ -1613,56 +1575,6 @@ function TelegramModal({
         </div>
         <div className="p-5">
           <TelegramSetupView onConnected={onConnected} />
-        </div>
-      </dialog>
-    </div>
-  );
-}
-
-function WhatsappModal({
-  onClose,
-  onConnected,
-}: {
-  onClose: () => void;
-  onConnected: () => void;
-}) {
-  const { t } = useTranslation();
-  const titleId = useId();
-  const dialogRef = useModalDialog(onClose);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismiss is supplementary to Escape key */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <dialog
-        open
-        ref={dialogRef}
-        tabIndex={-1}
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="relative w-full max-w-[560px] rounded-2xl border border-border bg-surface-1 shadow-xl overflow-hidden"
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div
-            id={titleId}
-            className="text-[14px] font-semibold text-text-primary"
-          >
-            {t("whatsappSetup.title")}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("common.closeDialog")}
-            className="text-text-muted hover:text-text-primary transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="p-5">
-          <WhatsappSetupView onConnected={onConnected} />
         </div>
       </dialog>
     </div>

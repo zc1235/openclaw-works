@@ -74,7 +74,7 @@
       "winCodeSign": "1.0.0"
     },
     "appId": "io.nexu.desktop",
-    "productName": "Nexu",
+    "productName": "灵光办公助手",
     "icon": "build/icon.icns",
     "directories": {
       "output": "release"

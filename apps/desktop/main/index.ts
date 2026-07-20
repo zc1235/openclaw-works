@@ -94,8 +94,11 @@ import { UpdateManager } from "./updater/update-manager";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Product display name (matches productName in package.json).
+const APP_DISPLAY_NAME = "灵光办公助手";
+
 // Set display name early (matches productName in package.json).
-app.setName("nexu");
+app.setName(APP_DISPLAY_NAME);
 nativeTheme.themeSource = "light";
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -618,8 +621,8 @@ function showAboutDialog(): void {
   ];
   const options = {
     type: "info" as const,
-    title: "About Nexu",
-    message: "Nexu",
+    title: `关于${APP_DISPLAY_NAME}`,
+    message: APP_DISPLAY_NAME,
     detail: detailLines.join("\n"),
     buttons: ["OK"],
     noLink: true,
@@ -687,7 +690,7 @@ function installApplicationMenu(): void {
       { type: "separator" },
       {
         id: "about-nexu",
-        label: `About Nexu (v${app.getVersion()})`,
+        label: `关于${APP_DISPLAY_NAME} (v${app.getVersion()})`,
         click: () => showAboutDialog(),
       },
     );
@@ -1170,11 +1173,11 @@ function ensureResidentTray(): void {
 
   const tray = new Tray(trayIcon);
   residentTray = tray;
-  tray.setToolTip("nexu");
+  tray.setToolTip(APP_DISPLAY_NAME);
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: "Open nexu",
+        label: `打开${APP_DISPLAY_NAME}`,
         click: () => {
           showMainWindowFromResidentEntry();
         },
@@ -1299,7 +1302,9 @@ function createMainWindow(): BrowserWindow {
     minWidth: needsSetupExtraction ? 1280 : 1120,
     minHeight: 720,
     backgroundColor: isMacOS ? "#00000000" : "#0B1020",
-    title: "nexu",
+    title: APP_DISPLAY_NAME,
+    // Hide the File/Edit/View/Window/Help menu bar on Windows/Linux.
+    autoHideMenuBar: true,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 18 },
     ...(isMacOS
@@ -1320,6 +1325,13 @@ function createMainWindow(): BrowserWindow {
       backgroundThrottling: false,
     },
   });
+
+  // Hide the top menu bar (File/Edit/View/Window/Help) on Windows/Linux.
+  // macOS keeps the system application menu for standard shortcuts.
+  if (process.platform !== "darwin") {
+    window.autoHideMenuBar = true;
+    window.setMenuBarVisibility(false);
+  }
 
   if (process.platform === "win32") {
     window.setSkipTaskbar(!shellPreferences.showInDock);

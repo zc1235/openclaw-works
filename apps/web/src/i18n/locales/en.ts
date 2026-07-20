@@ -116,7 +116,7 @@ const en = {
   "title.settings": "Settings · nexu",
   "title.linkFeishu": "Link Feishu · nexu",
   "title.connecting": "Connecting · nexu",
-  "title.default": "nexu",
+  "title.default": "灵光办公助手",
 
   // ── Workspace Layout ──
   "layout.brand": "Your digital coworker",
@@ -126,6 +126,12 @@ const en = {
   "layout.nav.skills": "Skills",
   "layout.nav.settings": "Settings",
   "layout.conversations": "Conversations",
+  "layout.session.moreActions": "More actions",
+  "layout.session.openWorkspace": "Open workspace",
+  "layout.session.delete": "Delete session",
+  "layout.session.deleted": "Session deleted",
+  "layout.session.deleteFailed": "Failed to delete session",
+  "layout.session.workspaceUnavailable": "Workspace folder is unavailable",
   "layout.signOut": "Sign out",
   "layout.help.title": "Help",
   "layout.help.docs": "Documentation",
