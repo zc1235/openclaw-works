@@ -1683,16 +1683,9 @@ export function ModelsPage() {
   const sidebarItems = useMemo(() => {
     const items: SidebarItem[] = [];
 
-    // Nexu official — always shown
-    const nexuProvider = providers.find((p) => p.id === "nexu");
-    items.push({
-      id: "nexu",
-      name: "nexu Official",
-      modelCount: nexuProvider?.models.length ?? 0,
-      configured: (nexuProvider?.models.length ?? 0) > 0,
-      managed: true,
-      kind: "managed",
-    });
+    // "nexu Official" managed provider removed with nexu accounts — the
+    // Models page now shows only BYOK / custom providers configured by the
+    // user.
 
     // Built-in BYOK providers — always listed
     for (const provider of visibleRegistryProviders) {

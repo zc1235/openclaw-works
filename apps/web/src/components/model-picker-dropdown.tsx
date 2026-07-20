@@ -27,10 +27,10 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 function getGroupKey(model: ModelPickerItem): string {
-  if (model.id.startsWith("link/")) {
-    return "nexu";
-  }
-
+  // Models with a "link/" prefix used to belong to the nexu Official
+  // managed provider. That provider has been removed; if any leftover
+  // "link/..." model id shows up (e.g. from an old config), just group
+  // it under its literal provider name instead of a special "nexu" bucket.
   return model.provider;
 }
 
@@ -89,9 +89,7 @@ export function ModelPickerDropdown({
   const currentModel = models.find((model) => model.id === currentModelId);
   const currentGroupKey = currentModel
     ? getGroupKey(currentModel)
-    : currentModelId.startsWith("link/")
-      ? "nexu"
-      : (currentModelId.split("/")[0] ?? "");
+    : (currentModelId.split("/")[0] ?? "");
   const currentModelLabel = currentModelId
     ? (currentModel?.name ?? getModelLabel(currentModelId))
     : emptyLabel;
@@ -106,11 +104,7 @@ export function ModelPickerDropdown({
     }
 
     const entries = Array.from(grouped.entries());
-    entries.sort((a, b) => {
-      if (a[0] === "nexu") return -1;
-      if (b[0] === "nexu") return 1;
-      return a[0].localeCompare(b[0]);
-    });
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
 
     return entries.map(([providerId, providerModels]) => ({
       id: providerId,

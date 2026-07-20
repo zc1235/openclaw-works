@@ -629,14 +629,10 @@ function WorkspaceLayoutInner() {
     location.pathname,
   );
 
-  const showEmptyState =
-    sessions.length === 0 &&
-    !isHomePage &&
-    !isRewardsPage &&
-    !isSkillsPage &&
-    !isModelsPage &&
-    !selectedSessionId;
-
+  // Legacy empty-state (which used to prompt users to configure an IM bot
+  // before the workspace was useful) is removed. Every page now renders its
+  // own content and manages its own empty presentation — the Outlet is
+  // rendered unconditionally.
   const selectedSession = selectedSessionId
     ? sessions.find((s) => s.id === selectedSessionId)
     : null;
@@ -1315,11 +1311,7 @@ function WorkspaceLayoutInner() {
                 />
               </div>
             ) : null}
-            {showEmptyState ? (
-              <EmptyState onGoConfig={() => navigate("/workspace/settings")} />
-            ) : (
-              <Outlet />
-            )}
+            <Outlet />
           </main>
         </div>
       </div>
