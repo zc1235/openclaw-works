@@ -53,8 +53,9 @@ jobs:
 
       - name: Install system dependencies for cross-compile
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends wine64 wine32 rpm
+          sudo apt-get install -y --no-install-recommends wine64 libwine rpm
 
       - name: Restore npm cache for runtime installs
         uses: actions/cache@v4
