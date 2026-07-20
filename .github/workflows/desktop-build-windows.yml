@@ -18,8 +18,11 @@ on:
     branches:
       - "feat/desktop-native-chat"
 
+# contents: write is required to create/update the GitHub Release that hosts
+# the .exe as a direct-download asset (release asset URLs are stable and do
+# not go through the Actions artifact interstitial page).
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: desktop-build-windows-${{ github.ref }}
@@ -109,6 +112,19 @@ jobs:
           $installerArtifacts | ForEach-Object { Write-Host " - $($_.FullName)" }
           Write-Host " - $unpackedExecutable"
 
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_version=$(node -e 'process.stdout.write(require("./apps/desktop/package.json").version)')
+          build_date=$(date +"%Y%m%d")
+          short_sha="${GITHUB_SHA::7}"
+          {
+            echo "version=$base_version"
+            echo "tag=win-v${base_version}-${build_date}-${short_sha}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload Windows installer (.exe)
         uses: actions/upload-artifact@v4
         with:
@@ -116,6 +132,32 @@ jobs:
           path: apps/desktop/release/*.exe
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish GitHub Release with .exe (direct download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Nexu Windows x64 ${{ steps.meta.outputs.version }} (${{ steps.meta.outputs.tag }})
+          prerelease: true
+          draft: false
+          fail_on_unmatched_files: true
+          body: |
+            Automated **Windows x64** desktop build (unsigned).
+
+            - Version: `${{ steps.meta.outputs.version }}`
+            - Branch: `${{ github.ref_name }}`
+            - Commit: `${{ github.sha }}`
+
+            ## Download
+            Grab the `nexu-setup-*.exe` asset below — release asset links are
+            direct downloads (no Actions interstitial page), e.g.
+            `https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/<file>.exe`
+
+            This is an unsigned build for testing; Windows SmartScreen may warn
+            on first launch (More info -> Run anyway).
+          files: |
+            apps/desktop/release/*.exe
 
       - name: Upload Windows portable app (unpacked)
         uses: actions/upload-artifact@v4
@@ -150,16 +192,21 @@ jobs:
 
       - name: Publish download summary
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          REPO: ${{ github.repository }}
         run: |
           $installerFiles = Get-ChildItem -Path "apps/desktop/release" -Filter "*.exe" -File | Select-Object -ExpandProperty Name
+          $releaseUrl = "https://github.com/$env:REPO/releases/tag/$env:RELEASE_TAG"
           "## Windows x64 Build Ready" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
           "" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          "Download from the **Artifacts** section of this workflow run:" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          "### Recommended: download from the Release (direct link)" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          "Release page: $releaseUrl" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
           "" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          foreach ($file in $installerFiles) {
+            "- https://github.com/$env:REPO/releases/download/$env:RELEASE_TAG/$file" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
+          "" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          "### Alternative: workflow Artifacts (goes through an interstitial page)" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
           "- ``nexu-desktop-windows-x64-installer`` — NSIS installer .exe" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
           "- ``nexu-desktop-windows-x64-unpacked`` — Portable unpacked app (run ``Nexu.exe`` directly)" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          "" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          "### Installer files" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          foreach ($file in $installerFiles) {
-            "- $file" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          }
