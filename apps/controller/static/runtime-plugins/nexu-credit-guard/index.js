@@ -258,7 +258,12 @@ const plugin = {
     api.on(
       "message_sending",
       async (event, ctx) => {
-        // Only intercept messages that look like errors
+        // Only intercept messages that look like errors. Note: Cloudflare-style
+        // blocks ("403 your request was blocked", "blocked by cloudflare",
+        // error 1010) do NOT contain the word "error" / "failed", so they must
+        // be matched explicitly here — otherwise the raw block page leaks
+        // through as the assistant reply (the WeChat 403 bug).
+        const lowerContent = event.content.toLowerCase();
         if (
           !event.content.startsWith("⚠️") &&
           !event.content.includes("error") &&
@@ -266,7 +271,11 @@ const plugin = {
           !event.content.includes("failed") &&
           !event.content.includes("API") &&
           !event.content.includes("limit") &&
-          !event.content.includes("credit")
+          !event.content.includes("credit") &&
+          !lowerContent.includes("blocked") &&
+          !lowerContent.includes("403") &&
+          !lowerContent.includes("forbidden") &&
+          !lowerContent.includes("cloudflare")
         ) {
           return;
         }

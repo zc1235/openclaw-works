@@ -137,12 +137,30 @@ async function resolveProvider(
         "The default bot has no model configured. Open the Models page and configure a BYOK provider (OpenAI, DeepSeek, Gemini, …) first.",
     };
   }
-  const slashIndex = rawModel.indexOf("/");
-  const providerKey = rawModel.slice(0, slashIndex);
-  const modelId = rawModel.slice(slashIndex + 1);
 
   const config = await container.configStore.getConfig();
-  const provider = config.models?.providers?.[providerKey];
+  const configuredProviders = config.models?.providers ?? {};
+
+  // A model id has the form `{providerKey}/{modelId}`. Most provider keys are
+  // a single segment (e.g. "openai"), but custom providers are stored under a
+  // TWO-segment key like "custom-openai/getjob" (templateId/instanceId). So a
+  // model id like "custom-openai/getjob/getjob" must NOT be split at the first
+  // slash. Resolve by finding the configured provider key that is the longest
+  // prefix of the model id (followed by "/").
+  const providerKey =
+    Object.keys(configuredProviders)
+      .filter(
+        (key) => rawModel === key || rawModel.startsWith(`${key}/`),
+      )
+      .sort((left, right) => right.length - left.length)[0] ??
+    // Fall back to the naive first-segment split when nothing matches (keeps
+    // the original behaviour for single-segment providers not yet in config).
+    rawModel.slice(0, rawModel.indexOf("/"));
+  const modelId = rawModel.startsWith(`${providerKey}/`)
+    ? rawModel.slice(providerKey.length + 1)
+    : rawModel;
+
+  const provider = configuredProviders[providerKey];
   if (!provider?.baseUrl) {
     return {
       error: `The bot points at model "${rawModel}", but provider "${providerKey}" is not configured. Open the Models page and configure it with your API key.`,

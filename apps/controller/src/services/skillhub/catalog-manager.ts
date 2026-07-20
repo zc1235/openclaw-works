@@ -46,6 +46,74 @@ function resolveClawHubBin(): string {
 
 const DEFAULT_DOWNLOAD_COUNT = 1000;
 
+interface AmbiguousSkillMatch {
+  ownerHandle?: string;
+  slug?: string;
+  ref?: string;
+  url?: string;
+}
+
+/**
+ * ClawHub returns a structured error when a bare slug matches skills published
+ * by multiple owners, e.g.:
+ *   {"code":"AMBIGUOUS_SKILL_SLUG","message":"Found multiple skills ...",
+ *    "matches":[{"ownerHandle":"gpyangyoujun","slug":"multi-search-engine",
+ *                "ref":"@gpyangyoujun/multi-search-engine", "url":"..."}]}
+ * Parse the first fully-qualified `ref` so we can retry the install
+ * unambiguously instead of surfacing a raw JSON blob to the user.
+ */
+function parseAmbiguousSkillRef(output: string): string | null {
+  if (!output.includes("AMBIGUOUS_SKILL_SLUG")) {
+    return null;
+  }
+  // The JSON object may be embedded in a larger log line. Find the first
+  // balanced object that contains the AMBIGUOUS_SKILL_SLUG code.
+  const start = output.indexOf("{");
+  if (start < 0) {
+    return null;
+  }
+  for (let end = output.lastIndexOf("}"); end > start; end -= 1) {
+    if (output[end] !== "}") {
+      continue;
+    }
+    const candidate = output.slice(start, end + 1);
+    try {
+      const parsed = JSON.parse(candidate) as {
+        code?: string;
+        matches?: AmbiguousSkillMatch[];
+      };
+      if (parsed.code !== "AMBIGUOUS_SKILL_SLUG") {
+        continue;
+      }
+      const first = parsed.matches?.[0];
+      if (first?.ref && first.ref.trim().length > 0) {
+        return first.ref.trim();
+      }
+      if (first?.ownerHandle && first?.slug) {
+        return `@${first.ownerHandle}/${first.slug}`;
+      }
+      return null;
+    } catch {
+      // Keep scanning shorter candidates.
+    }
+  }
+  return null;
+}
+
+function extractProcessOutput(error: unknown): string {
+  if (typeof error !== "object" || error === null) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  const record = error as {
+    stdout?: unknown;
+    stderr?: unknown;
+    message?: unknown;
+  };
+  return [record.stdout, record.stderr, record.message]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+}
+
 /**
  * Corrects known broken slugs in the ClawHub catalog.
  * Key = broken slug in catalog data, Value = correct slug on ClawHub.
@@ -278,6 +346,47 @@ export class CatalogManager {
    * Step A: Download via clawhub into skillsDir
    * Step B: Record in DB with source "managed"
    */
+  /**
+   * Run `clawhub install <slugOrRef>` once. On an AMBIGUOUS_SKILL_SLUG error
+   * (multiple owners publish the same slug), automatically retry with the
+   * first fully-qualified `@owner/slug` ref so the install succeeds without
+   * user intervention. Throws on any other failure.
+   */
+  private async runClawhubInstall(slugOrRef: string): Promise<void> {
+    const clawHubBin = resolveClawHubBin();
+    const runOnce = async (target: string) => {
+      await execFileAsync(
+        process.execPath,
+        [
+          clawHubBin,
+          "--workdir",
+          this.skillsDir,
+          "--dir",
+          ".",
+          "install",
+          target,
+          "--force",
+        ],
+        { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
+      );
+    };
+
+    try {
+      await runOnce(slugOrRef);
+    } catch (error) {
+      const output = extractProcessOutput(error);
+      const qualifiedRef = parseAmbiguousSkillRef(output);
+      if (!qualifiedRef) {
+        throw error;
+      }
+      this.log(
+        "warn",
+        `install slug=${slugOrRef} was ambiguous; retrying with qualified ref=${qualifiedRef}`,
+      );
+      await runOnce(qualifiedRef);
+    }
+  }
+
   async installSkill(
     rawSlug: string,
   ): Promise<{ ok: boolean; error?: string }> {
@@ -289,26 +398,7 @@ export class CatalogManager {
 
     this.log("info", `installing skill slug=${slug} dir=${this.skillsDir}`);
     try {
-      const clawHubBin = resolveClawHubBin();
-      this.log("info", `install resolved clawhub=${clawHubBin}`);
-      const { stdout, stderr } = await execFileAsync(
-        process.execPath,
-        [
-          clawHubBin,
-          "--workdir",
-          this.skillsDir,
-          "--dir",
-          ".",
-          "install",
-          slug,
-          "--force",
-        ],
-        { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
-      );
-      if (stdout)
-        this.log("info", `install stdout slug=${slug}: ${stdout.trim()}`);
-      if (stderr)
-        this.log("warn", `install stderr slug=${slug}: ${stderr.trim()}`);
+      await this.runClawhubInstall(slug);
       this.log("info", `install ok slug=${slug}`);
       await this.installSkillDeps(resolve(this.skillsDir, slug), slug);
       this.db.recordInstall(slug, "managed");
@@ -331,26 +421,7 @@ export class CatalogManager {
     }
 
     this.log("info", `installing: ${slug} -> ${this.skillsDir}`);
-    const clawHubBin = resolveClawHubBin();
-    this.log("info", `install resolved clawhub=${clawHubBin}`);
-
-    const { stdout, stderr } = await execFileAsync(
-      process.execPath,
-      [
-        clawHubBin,
-        "--workdir",
-        this.skillsDir,
-        "--dir",
-        ".",
-        "install",
-        slug,
-        "--force",
-      ],
-      { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
-    );
-    if (stdout) this.log("info", `install stdout ${slug}: ${stdout.trim()}`);
-    if (stderr) this.log("warn", `install stderr ${slug}: ${stderr.trim()}`);
-
+    await this.runClawhubInstall(slug);
     await this.installSkillDeps(resolve(this.skillsDir, slug), slug);
   }
 
@@ -499,7 +570,6 @@ export class CatalogManager {
 
     this.log("info", `curated skills: installing ${toInstall.length} skills`);
 
-    const clawHubBin = resolveClawHubBin();
     const CONCURRENCY = 5;
 
     const installOne = async (
@@ -507,22 +577,7 @@ export class CatalogManager {
     ): Promise<{ slug: string; ok: boolean }> => {
       try {
         this.log("info", `curated installing: ${slug} -> ${this.skillsDir}`);
-        const { stdout, stderr } = await execFileAsync(
-          process.execPath,
-          [
-            clawHubBin,
-            "--workdir",
-            this.skillsDir,
-            "--dir",
-            ".",
-            "install",
-            slug,
-            "--force",
-          ],
-          { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
-        );
-        if (stdout) this.log("info", `curated stdout: ${stdout.trim()}`);
-        if (stderr) this.log("warn", `curated stderr: ${stderr.trim()}`);
+        await this.runClawhubInstall(slug);
         this.log("info", `curated install ok: ${slug}`);
         return { slug, ok: true };
       } catch (error) {
