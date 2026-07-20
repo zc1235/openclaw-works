@@ -1,3 +1,4 @@
+import { McpServersPanel } from "@/components/mcp-servers-panel";
 import { ToolkitIcon } from "@/components/toolkit-icon";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -659,6 +660,9 @@ export function IntegrationsPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-6">
+        {/* MCP servers — user-managed Model Context Protocol connections */}
+        <McpServersPanel />
+
         {/* Search */}
         <div className="mb-4 relative">
           <Search

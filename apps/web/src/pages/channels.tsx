@@ -1,8 +1,6 @@
 import { DingtalkSetupView } from "@/components/channel-setup/dingtalk-setup-view";
-import { DiscordSetupView } from "@/components/channel-setup/discord-setup-view";
 import { FeishuSetupView } from "@/components/channel-setup/feishu-setup-view";
 import { QqbotSetupView } from "@/components/channel-setup/qqbot-setup-view";
-import { SlackOAuthView } from "@/components/channel-setup/slack-oauth-view";
 import { TelegramSetupView } from "@/components/channel-setup/telegram-setup-view";
 import { WechatSetupView } from "@/components/channel-setup/wechat-setup-view";
 import { WecomSetupView } from "@/components/channel-setup/wecom-setup-view";
@@ -19,22 +17,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BookOpen,
-  Check,
   CheckCircle2,
   Circle,
   Clock,
-  Copy,
   ExternalLink,
   Key,
-  Link2,
   Loader2,
   RotateCcw,
   Shield,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import "@/lib/api";
 import {
@@ -44,8 +38,6 @@ import {
 } from "../../lib/api/sdk.gen";
 
 type Platform =
-  | "slack"
-  | "discord"
   | "feishu"
   | "dingtalk"
   | "wecom"
@@ -65,24 +57,20 @@ type LiveStatusData = {
 };
 
 const PLATFORMS: { id: Platform; emoji: string; desc: string }[] = [
-  { id: "whatsapp", emoji: "\u{1F4DE}", desc: "Personal WhatsApp" },
-  { id: "wechat", emoji: "\u{1F4AC}", desc: "Personal WeChat" },
+  { id: "wechat", emoji: "\u{1F4AC}", desc: "个人微信" },
+  { id: "wecom", emoji: "\u{1F4BC}", desc: "企业微信机器人" },
+  { id: "feishu", emoji: "\u{1F426}", desc: "飞书机器人" },
+  { id: "dingtalk", emoji: "\u{1F4F1}", desc: "钉钉机器人" },
+  { id: "qqbot", emoji: "\u{1F427}", desc: "QQ 机器人" },
   { id: "telegram", emoji: "\u{2708}\u{FE0F}", desc: "Telegram Bot" },
-  { id: "dingtalk", emoji: "\u{1F4F1}", desc: "DingTalk Bot" },
-  { id: "qqbot", emoji: "\u{1F427}", desc: "QQ Bot" },
-  { id: "wecom", emoji: "\u{1F4BC}", desc: "WeCom Bot" },
-  { id: "feishu", emoji: "\u{1F426}", desc: "Feishu Bot" },
-  { id: "slack", emoji: "#", desc: "Workspace Bot" },
-  { id: "discord", emoji: "\u{1F3AE}", desc: "Server Bot" },
+  { id: "whatsapp", emoji: "\u{1F4DE}", desc: "个人 WhatsApp" },
 ];
 
 const PLATFORM_LABELS: Record<Platform, string> = {
-  slack: "Slack",
-  discord: "Discord",
-  feishu: "Feishu",
-  dingtalk: "DingTalk",
-  wecom: "WeCom",
-  wechat: "WeChat",
+  feishu: "飞书",
+  dingtalk: "钉钉",
+  wecom: "企业微信",
+  wechat: "微信",
   telegram: "Telegram",
   whatsapp: "WhatsApp",
   qqbot: "QQ",
@@ -93,24 +81,8 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 export function ChannelsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [platform, setPlatform] = useState<Platform>("slack");
+  const [platform, setPlatform] = useState<Platform>("wechat");
   const [forceGuide, setForceGuide] = useState(false);
-
-  // Auto-enter manual Slack flow when redirected from OAuth error (run once on mount)
-  const slackManual = searchParams.get("slackManual") === "true";
-  const slackError = searchParams.get("slackError") || undefined;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount to consume URL params
-  useEffect(() => {
-    if (slackManual || slackError) {
-      setPlatform("slack");
-      setForceGuide(false);
-      const next = new URLSearchParams(searchParams);
-      next.delete("slackManual");
-      next.delete("slackError");
-      setSearchParams(next, { replace: true });
-    }
-  }, []);
 
   const { data: channelsData } = useQuery({
     queryKey: ["channels"],
@@ -249,19 +221,7 @@ export function ChannelsPage() {
 
       {/* Content */}
       {showGuide ? (
-        platform === "slack" ? (
-          <SlackOAuthView
-            onConnected={handleConnected}
-            initialManual={slackManual}
-            oauthError={slackError}
-            disabled={quotaLimited}
-          />
-        ) : platform === "discord" ? (
-          <DiscordSetupView
-            onConnected={handleConnected}
-            disabled={quotaLimited}
-          />
-        ) : platform === "telegram" ? (
+        platform === "telegram" ? (
           <TelegramSetupView
             onConnected={handleConnected}
             disabled={quotaLimited}
@@ -334,7 +294,6 @@ function ConfiguredView({
   liveStatusData: LiveStatusData | undefined;
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const liveEntry = liveStatusData?.channels?.find(
@@ -379,55 +338,6 @@ function ConfiguredView({
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Extract teamId from accountId (format: "slack-{appId}-{teamId}")
-  const slackTeamId =
-    platform === "slack"
-      ? channel.accountId.replace(/^slack-[^-]+-/, "")
-      : null;
-
-  const handleOpenSlack = useCallback(() => {
-    const teamId = slackTeamId;
-    const botUser = channel.botUserId;
-
-    // Build native app and web URLs
-    const nativeUrl =
-      teamId && botUser
-        ? `slack://user?team=${teamId}&id=${botUser}`
-        : teamId
-          ? `slack://open?team=${teamId}`
-          : null;
-    const webUrl =
-      teamId && botUser
-        ? `https://app.slack.com/client/${teamId}/messages/${botUser}`
-        : teamId
-          ? `https://app.slack.com/client/${teamId}`
-          : null;
-
-    if (!nativeUrl || !webUrl) return;
-
-    // Try native app first. If the app opens, the browser loses focus
-    // and we cancel the fallback. Otherwise open the web URL after 5s.
-    const fallbackTimer = setTimeout(() => {
-      window.open(webUrl, "_blank", "noopener,noreferrer");
-    }, 5000);
-    const cancelFallback = () => {
-      clearTimeout(fallbackTimer);
-      window.removeEventListener("blur", cancelFallback);
-    };
-    window.addEventListener("blur", cancelFallback);
-    window.location.href = nativeUrl;
-  }, [slackTeamId, channel.botUserId]);
-
-  const webhookUrl = `${window.location.origin}/api/${platform}/events`;
-  const discordInviteUrl = channel.appId
-    ? `https://discord.com/oauth2/authorize?client_id=${channel.appId}&scope=bot&permissions=8`
-    : null;
   const telegramBotUrl =
     platform === "telegram"
       ? getChannelChatUrl(
@@ -498,60 +408,6 @@ function ConfiguredView({
           </button>
         </div>
 
-        {/* Discord: Add Bot to Server */}
-        {platform === "discord" && discordInviteUrl && (
-          <div className="p-5 rounded-xl border bg-surface-1 border-border">
-            <div className="flex gap-2 items-center mb-4">
-              <div className="flex justify-center items-center w-7 h-7 rounded-lg bg-indigo-500/10 shrink-0">
-                <ExternalLink size={13} className="text-indigo-500" />
-              </div>
-              <h3 className="text-[13px] font-semibold text-text-primary">
-                {t("channels.addToServer")}
-              </h3>
-            </div>
-            <p className="text-[12px] text-text-muted mb-3 leading-relaxed">
-              {t("channels.addToServerDesc")}
-            </p>
-            <a
-              href={discordInviteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex gap-1.5 items-center px-4 py-2 text-[12px] font-medium text-white rounded-lg bg-accent hover:bg-accent-hover transition-all"
-            >
-              <ExternalLink size={13} /> {t("channels.addBotToServer")}
-            </a>
-          </div>
-        )}
-
-        {/* Slack: Open in Slack */}
-        {platform === "slack" && slackTeamId && (
-          <div className="p-5 rounded-xl border bg-surface-1 border-border">
-            <div className="flex gap-2 items-center mb-4">
-              <div className="flex justify-center items-center w-7 h-7 rounded-lg bg-blue-500/10 shrink-0">
-                <ExternalLink size={13} className="text-blue-500" />
-              </div>
-              <h3 className="text-[13px] font-semibold text-text-primary">
-                {t("channels.openInSlack")}
-              </h3>
-            </div>
-            <p className="text-[12px] text-text-muted mb-3 leading-relaxed">
-              {channel.botUserId
-                ? t("channels.openSlackDM")
-                : t("channels.openSlackWorkspace")}
-            </p>
-            <button
-              type="button"
-              onClick={handleOpenSlack}
-              className="inline-flex gap-1.5 items-center px-4 py-2 text-[12px] font-medium text-white rounded-lg bg-accent hover:bg-accent-hover transition-all"
-            >
-              <ExternalLink size={13} />{" "}
-              {channel.botUserId
-                ? t("channels.messageBotSlack")
-                : t("channels.openWorkspace")}
-            </button>
-          </div>
-        )}
-
         {/* Feishu: Open in Feishu */}
         {platform === "feishu" && channel.appId && (
           <div className="p-5 rounded-xl border bg-surface-1 border-border">
@@ -601,37 +457,6 @@ function ConfiguredView({
           </div>
         )}
 
-        {/* Slack: Webhook URL */}
-        {platform === "slack" && (
-          <div className="p-5 rounded-xl border bg-surface-1 border-border">
-            <div className="flex gap-2 items-center mb-4">
-              <div className="flex justify-center items-center w-7 h-7 rounded-lg bg-blue-500/10 shrink-0">
-                <Link2 size={13} className="text-blue-500" />
-              </div>
-              <h3 className="text-[13px] font-semibold text-text-primary">
-                {t("channels.webhookUrl")}
-              </h3>
-            </div>
-            <div className="flex gap-2 items-center p-3 rounded-lg border bg-surface-0 border-border font-mono text-[12px]">
-              <code className="flex-1 break-all text-text-secondary">
-                {webhookUrl}
-              </code>
-              <button
-                type="button"
-                onClick={() => handleCopy(webhookUrl)}
-                className="p-1.5 rounded-lg transition-all text-text-muted hover:text-text-primary hover:bg-surface-3 shrink-0"
-                title="Copy"
-              >
-                {copied ? (
-                  <Check size={13} className="text-[var(--color-success)]" />
-                ) : (
-                  <Copy size={13} />
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Credentials */}
         <div className="p-5 rounded-xl border bg-surface-1 border-border">
           <div className="flex gap-2 items-center mb-4">
@@ -654,9 +479,7 @@ function ConfiguredView({
             {channel.teamName && (
               <div>
                 <span className="text-[11px] text-text-muted font-medium mb-1.5 block">
-                  {platform === "discord"
-                    ? t("channels.serverName")
-                    : t("channels.teamName")}
+                  {t("channels.teamName")}
                 </span>
                 <div className="px-3 py-2.5 w-full text-[13px] rounded-lg border border-border bg-surface-0 text-text-secondary">
                   {channel.teamName}

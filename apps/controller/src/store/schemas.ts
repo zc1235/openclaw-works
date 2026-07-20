@@ -9,6 +9,7 @@ import {
   getProviderAliasCandidates,
   getProviderRuntimePolicy,
   integrationResponseSchema,
+  mcpServerResponseSchema,
   normalizeProviderId,
   parseCustomProviderKey,
   persistedModelsConfigSchema,
@@ -551,6 +552,7 @@ const nexuConfigObjectSchema = z.object({
   models: persistedModelsConfigSchema.default({ mode: "merge", providers: {} }),
   providers: z.array(controllerProviderSchema).optional(),
   integrations: z.array(integrationResponseSchema).default([]),
+  mcpServers: z.array(mcpServerResponseSchema).default([]),
   channels: z.array(channelResponseSchema).default([]),
   templates: z.record(z.string(), controllerTemplateSchema).default({}),
   desktop: z

@@ -8,6 +8,7 @@ import {
   resolveModelId,
 } from "../lib/openclaw-config-compiler.js";
 import type { CreditGuardStateWriter } from "../runtime/credit-guard-state-writer.js";
+import type { McporterConfigWriter } from "../runtime/mcporter-config-writer.js";
 import type { OpenClawAuthProfilesStore } from "../runtime/openclaw-auth-profiles-store.js";
 import type { OpenClawAuthProfilesWriter } from "../runtime/openclaw-auth-profiles-writer.js";
 import type { OpenClawConfigWriter } from "../runtime/openclaw-config-writer.js";
@@ -135,6 +136,7 @@ export class OpenClawSyncService {
     private readonly runtimePluginWriter: OpenClawRuntimePluginWriter,
     private readonly runtimeModelWriter: OpenClawRuntimeModelWriter,
     private readonly creditGuardStateWriter: CreditGuardStateWriter,
+    private readonly mcporterConfigWriter: McporterConfigWriter,
     private readonly templateWriter: WorkspaceTemplateWriter,
     private readonly watchTrigger: OpenClawWatchTrigger,
     private readonly gatewayService: OpenClawGatewayService,
@@ -388,6 +390,7 @@ export class OpenClawSyncService {
       );
     }
     await this.creditGuardStateWriter.write(locale);
+    await this.mcporterConfigWriter.write(config.mcpServers ?? []);
     await this.compiledStore.saveConfig(compiled);
 
     // 3. If OpenClaw is not connected yet, nudge the file watcher after the

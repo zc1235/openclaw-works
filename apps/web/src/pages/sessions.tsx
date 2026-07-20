@@ -295,19 +295,19 @@ const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
   feishu: {
     badgeClass:
       "border-[rgba(51,112,255,0.14)] bg-[rgba(51,112,255,0.08)] text-[#3370FF]",
-    label: "Feishu",
+    label: "飞书",
     openLabel: "channels.openInFeishu",
   },
   dingtalk: {
     badgeClass:
       "border-[rgba(44,44,44,0.14)] bg-[rgba(44,44,44,0.08)] text-[#2C2C2C]",
-    label: "DingTalk",
+    label: "钉钉",
     openLabel: "channels.openInDingTalk",
   },
   wecom: {
     badgeClass:
       "border-[rgba(7,193,96,0.14)] bg-[rgba(7,193,96,0.08)] text-[#07C160]",
-    label: "WeCom",
+    label: "企业微信",
     openLabel: "channels.openInWeCom",
   },
   qqbot: {
@@ -319,7 +319,7 @@ const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
   wechat: {
     badgeClass:
       "border-[rgba(141,200,27,0.14)] bg-[rgba(141,200,27,0.08)] text-[#8DC81B]",
-    label: "WeChat",
+    label: "微信",
     openLabel: "channels.openInWeChat",
   },
   web: DEFAULT_PLATFORM_CONFIG,

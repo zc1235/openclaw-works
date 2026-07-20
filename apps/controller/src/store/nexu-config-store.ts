@@ -22,9 +22,11 @@ import {
   type cloudProfileSchema,
   type connectIntegrationResponseSchema,
   type connectIntegrationSchema,
+  type CreateMcpServerInput,
   getDefaultProviderBaseUrls,
   getProviderRuntimePolicy,
   type integrationResponseSchema,
+  type McpServerResponse,
   parseCustomProviderKey,
   type refreshIntegrationSchema,
   rewardGroupSchema,
@@ -637,6 +639,7 @@ export class NexuConfigStore {
           providers: {},
         },
         integrations: [],
+        mcpServers: [],
         channels: [],
         templates: {},
         desktop: {
@@ -1714,6 +1717,62 @@ export class NexuConfigStore {
   async listIntegrations(): Promise<IntegrationResponse[]> {
     const config = await this.getConfig();
     return config.integrations;
+  }
+
+  async listMcpServers(): Promise<McpServerResponse[]> {
+    const config = await this.getConfig();
+    return config.mcpServers ?? [];
+  }
+
+  async createMcpServer(
+    input: CreateMcpServerInput,
+  ): Promise<McpServerResponse> {
+    const timestamp = now();
+    const server: McpServerResponse = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      transport: input.transport,
+      url: input.transport === "http" ? (input.url ?? null) : null,
+      bearerToken:
+        input.transport === "http" ? (input.bearerToken ?? null) : null,
+      command: input.transport === "stdio" ? (input.command ?? null) : null,
+      args: input.transport === "stdio" ? (input.args ?? []) : [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    await this.store.update((config) => {
+      const existing = config.mcpServers ?? [];
+      // Replace any server with the same name (names are the mcporter key).
+      const filtered = existing.filter(
+        (candidate) => candidate.name !== server.name,
+      );
+      return {
+        ...config,
+        mcpServers: [...filtered, server],
+      };
+    });
+
+    return server;
+  }
+
+  async deleteMcpServer(id: string): Promise<boolean> {
+    let removed = false;
+    await this.store.update((config) => {
+      const existing = config.mcpServers ?? [];
+      const next = existing.filter((server) => {
+        if (server.id === id) {
+          removed = true;
+          return false;
+        }
+        return true;
+      });
+      return {
+        ...config,
+        mcpServers: next,
+      };
+    });
+    return removed;
   }
 
   async getLocalProfile(): Promise<UserProfileResponse> {

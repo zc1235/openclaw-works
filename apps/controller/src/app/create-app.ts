@@ -9,6 +9,7 @@ import { registerDesktopCompatRoutes } from "../routes/desktop-compat-routes.js"
 import { registerDesktopRewardsRoutes } from "../routes/desktop-rewards-routes.js";
 import { registerDesktopRoutes } from "../routes/desktop-routes.js";
 import { registerIntegrationRoutes } from "../routes/integration-routes.js";
+import { registerMcpRoutes } from "../routes/mcp-routes.js";
 import { registerMiscCompatRoutes } from "../routes/misc-compat-routes.js";
 import { registerModelRoutes } from "../routes/model-routes.js";
 import { registerProviderOAuthRoutes } from "../routes/provider-oauth-routes.js";
@@ -46,6 +47,7 @@ export function createApp(container: ControllerContainer) {
   registerModelRoutes(app, container);
   registerProviderOAuthRoutes(app, container);
   registerIntegrationRoutes(app, container);
+  registerMcpRoutes(app, container);
   registerArtifactRoutes(app, container);
   registerSkillhubRoutes(app, container);
   registerUserRoutes(app, container);

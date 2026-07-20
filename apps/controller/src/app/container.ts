@@ -4,6 +4,7 @@ import { CreditGuardStateWriter } from "../runtime/credit-guard-state-writer.js"
 import { GatewayClient } from "../runtime/gateway-client.js";
 import { startHealthLoop } from "../runtime/loops.js";
 import { startAnalyticsLoop } from "../runtime/loops.js";
+import { McporterConfigWriter } from "../runtime/mcporter-config-writer.js";
 import { OpenClawAuthProfilesStore } from "../runtime/openclaw-auth-profiles-store.js";
 import { OpenClawAuthProfilesWriter } from "../runtime/openclaw-auth-profiles-writer.js";
 import { OpenClawConfigWriter } from "../runtime/openclaw-config-writer.js";
@@ -89,6 +90,7 @@ export async function createContainer(): Promise<ControllerContainer> {
   const runtimePluginWriter = new OpenClawRuntimePluginWriter(env);
   const runtimeModelWriter = new OpenClawRuntimeModelWriter(env);
   const creditGuardStateWriter = new CreditGuardStateWriter(env);
+  const mcporterConfigWriter = new McporterConfigWriter();
   const templateWriter = new WorkspaceTemplateWriter(env);
   const gatewayClient = new GatewayClient(env);
   const sessionsRuntime = new SessionsRuntime(env);
@@ -133,6 +135,7 @@ export async function createContainer(): Promise<ControllerContainer> {
     runtimePluginWriter,
     runtimeModelWriter,
     creditGuardStateWriter,
+    mcporterConfigWriter,
     templateWriter,
     watchTrigger,
     gatewayService,
