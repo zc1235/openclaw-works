@@ -11,17 +11,12 @@ name: Desktop Build Windows x64
 
 on:
   workflow_dispatch:
+  # Every push to the feature branch triggers a build. No paths filter —
+  # empty / doc-only commits should still build so the user can quickly
+  # retrigger a run when a queued one gets cancelled.
   push:
     branches:
       - "feat/desktop-native-chat"
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "scripts/**"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "package.json"
-      - ".github/workflows/desktop-build-windows.yml"
 
 permissions:
   contents: read
