@@ -55,7 +55,12 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends wine64 libwine rpm
+          sudo apt-get install -y --no-install-recommends \
+            wine64 wine64-tools libwine libwine:i386 rpm
+          # Verify wine is accessible
+          wine64 --version || true
+          # Create symlink so electron-builder finds 'wine'
+          sudo ln -sf /usr/bin/wine64 /usr/bin/wine || true
 
       - name: Restore npm cache for runtime installs
         uses: actions/cache@v4
