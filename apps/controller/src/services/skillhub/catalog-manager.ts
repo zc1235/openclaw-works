@@ -59,10 +59,10 @@ interface AmbiguousSkillMatch {
  *   {"code":"AMBIGUOUS_SKILL_SLUG","message":"Found multiple skills ...",
  *    "matches":[{"ownerHandle":"gpyangyoujun","slug":"multi-search-engine",
  *                "ref":"@gpyangyoujun/multi-search-engine", "url":"..."}]}
- * Parse the first fully-qualified `ref` so we can retry the install
- * unambiguously instead of surfacing a raw JSON blob to the user.
+ * Parse the first match so we can retry the install with an owner-qualified
+ * identifier instead of surfacing a raw JSON blob to the user.
  */
-function parseAmbiguousSkillRef(output: string): string | null {
+function parseAmbiguousSkillMatch(output: string): AmbiguousSkillMatch | null {
   if (!output.includes("AMBIGUOUS_SKILL_SLUG")) {
     return null;
   }
@@ -85,19 +85,39 @@ function parseAmbiguousSkillRef(output: string): string | null {
       if (parsed.code !== "AMBIGUOUS_SKILL_SLUG") {
         continue;
       }
-      const first = parsed.matches?.[0];
-      if (first?.ref && first.ref.trim().length > 0) {
-        return first.ref.trim();
-      }
-      if (first?.ownerHandle && first?.slug) {
-        return `@${first.ownerHandle}/${first.slug}`;
-      }
-      return null;
+      return parsed.matches?.[0] ?? null;
     } catch {
       // Keep scanning shorter candidates.
     }
   }
   return null;
+}
+
+/**
+ * Ordered list of install targets to try when a bare slug is ambiguous.
+ *
+ * clawhub's `install` validates its positional argument as a slug and rejects
+ * a leading "@" — it echoes `Invalid slug: @owner/slug`. It DOES accept the
+ * owner-qualified `owner/slug` form (it splits on "/"), so we try that first,
+ * then the ref with any leading "@" stripped, and finally the raw ref as a
+ * last resort for other clawhub/registry versions.
+ */
+function buildDisambiguationTargets(match: AmbiguousSkillMatch): string[] {
+  const targets: string[] = [];
+  const add = (value?: string | null): void => {
+    const trimmed = value?.trim();
+    if (trimmed && !targets.includes(trimmed)) {
+      targets.push(trimmed);
+    }
+  };
+  if (match.ownerHandle && match.slug) {
+    add(`${match.ownerHandle}/${match.slug}`);
+  }
+  if (match.ref) {
+    add(match.ref.replace(/^@+/, ""));
+    add(match.ref);
+  }
+  return targets;
 }
 
 function extractProcessOutput(error: unknown): string {
@@ -375,15 +395,37 @@ export class CatalogManager {
       await runOnce(slugOrRef);
     } catch (error) {
       const output = extractProcessOutput(error);
-      const qualifiedRef = parseAmbiguousSkillRef(output);
-      if (!qualifiedRef) {
+      const match = parseAmbiguousSkillMatch(output);
+      if (!match) {
         throw error;
       }
-      this.log(
-        "warn",
-        `install slug=${slugOrRef} was ambiguous; retrying with qualified ref=${qualifiedRef}`,
+
+      const targets = buildDisambiguationTargets(match);
+      for (const target of targets) {
+        try {
+          this.log(
+            "warn",
+            `install slug=${slugOrRef} was ambiguous; retrying as ${target}`,
+          );
+          await runOnce(target);
+          return;
+        } catch (retryError) {
+          this.log(
+            "warn",
+            `ambiguous retry failed for ${target}: ${extractProcessOutput(retryError)}`,
+          );
+        }
+      }
+
+      // Every owner-qualified attempt failed — surface a clean, actionable
+      // message instead of the raw "Command failed / Invalid slug" dump.
+      const qualified =
+        match.ownerHandle && match.slug
+          ? `${match.ownerHandle}/${match.slug}`
+          : (match.slug ?? slugOrRef);
+      throw new Error(
+        `Skill "${slugOrRef}" is published by multiple authors and could not be installed automatically (try "${qualified}").`,
       );
-      await runOnce(qualifiedRef);
     }
   }
 
