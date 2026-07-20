@@ -895,11 +895,9 @@ function WorkspaceLayoutInner() {
           >
             {isDesktopClient ? (
               <>
-                <img
-                  src="/brand/logo-black-1.svg"
-                  alt="nexu"
-                  className="h-6 object-contain"
-                />
+                <span className="text-[16px] font-semibold text-text-primary whitespace-nowrap">
+                  灵光
+                </span>
                 <div className="flex items-center gap-2">
                   {hasUpdate && updateDismissed && (
                     <button
@@ -1004,19 +1002,6 @@ function WorkspaceLayoutInner() {
             >
               <BookOpen size={16} className="shrink-0" />
               {t("layout.nav.integrations")}
-            </Link>
-            <Link
-              to="/workspace/models"
-              onClick={() => {
-                track("workspace_sidebar_click", { target: "models" });
-              }}
-              className={cn(
-                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
-                isModelsPage && "nav-item-active",
-              )}
-            >
-              <Settings size={16} className="shrink-0" />
-              {t("layout.nav.models")}
             </Link>
           </div>
 

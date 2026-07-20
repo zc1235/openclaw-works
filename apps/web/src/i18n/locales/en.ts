@@ -107,17 +107,17 @@ const en = {
   "auth.capability.automation": "Automation",
 
   // ── Document Titles ──
-  "title.signIn": "Sign In · nexu",
-  "title.claim": "Claim · nexu",
-  "title.home": "Home · nexu",
-  "title.desktopChat": "New task · nexu",
-  "title.channels": "Channels · nexu",
-  "title.integrations": "Integrations · nexu",
-  "title.rewards": "Rewards · nexu",
-  "title.skills": "Skills · nexu",
-  "title.settings": "Settings · nexu",
-  "title.linkFeishu": "Link Feishu · nexu",
-  "title.connecting": "Connecting · nexu",
+  "title.signIn": "Sign In · 灵光",
+  "title.claim": "Claim · 灵光",
+  "title.home": "Home · 灵光",
+  "title.desktopChat": "New task · 灵光",
+  "title.channels": "Channels · 灵光",
+  "title.integrations": "Integrations · 灵光",
+  "title.rewards": "Rewards · 灵光",
+  "title.skills": "Skills · 灵光",
+  "title.settings": "Settings · 灵光",
+  "title.linkFeishu": "Link Feishu · 灵光",
+  "title.connecting": "Connecting · 灵光",
   "title.default": "灵光办公助手",
 
   // ── Workspace Layout ──
@@ -471,16 +471,16 @@ const en = {
   "settings.section.data": "Data & Privacy",
   "settings.desktop.launchAtLogin": "Launch at startup",
   "settings.desktop.launchAtLoginHint":
-    "Automatically open Nexu when your computer starts.",
+    "Automatically open 灵光 when your computer starts.",
   "settings.desktop.showInDock": "Show in Dock",
   "settings.desktop.showInDockHint":
-    "Show nexu in your Mac Dock for quick access.",
+    "Show 灵光 in your Mac Dock for quick access.",
   "settings.desktop.showInTaskbar": "Show in taskbar",
   "settings.desktop.showInTaskbarHint":
-    "Show nexu in the taskbar; when off, it stays in the system tray only",
+    "Show 灵光 in the taskbar; when off, it stays in the system tray only",
   "settings.desktop.updateFailed": "Failed to update desktop setting",
   "settings.data.analytics": "Usage analytics",
-  "settings.data.analyticsHint": "Help improve nexu with anonymous usage data",
+  "settings.data.analyticsHint": "Help improve 灵光 with anonymous usage data",
   "settings.data.crashReports": "Crash reports",
   "settings.data.crashReportsHint":
     "Send crash reports automatically to help fix bugs",
@@ -518,7 +518,7 @@ const en = {
   "settings.about.github": "GitHub Repository",
   "settings.about.changelog": "Changelog",
   "settings.about.feedback": "Send feedback",
-  "settings.providers.botModelTitle": "nexu Bot model",
+  "settings.providers.botModelTitle": "灵光 Bot model",
   "settings.providers.botModelDesc":
     "Pick the default model used by your desktop workspace.",
   "settings.providers.workspace": "Workspace",

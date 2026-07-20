@@ -427,9 +427,21 @@ export class OpenClawGatewayService {
               (running && configured && hasProbeOk) ||
               operationalWithoutProbe);
 
+          // WeChat (openclaw-weixin) keeps its session process running while
+          // logged in, but the plugin frequently reports benign/stale
+          // `lastError` strings during transient reconnects — which made a
+          // healthy, connected WeChat surface as "连接异常" in the UI. Treat a
+          // live WeChat session (enabled + running) as connected. A genuine
+          // logout pauses the plugin (running=false), which still falls
+          // through to the error/disconnected branches below.
+          const weixinSessionLive =
+            openclawChannelId === "openclaw-weixin" && enabled && running;
+
           let derivedStatus: ChannelLiveStatus;
           if (!enabled) {
             derivedStatus = "disconnected";
+          } else if (weixinSessionLive) {
+            derivedStatus = "connected";
           } else if (lastError) {
             derivedStatus = "error";
           } else if (snapshot.restartPending === true) {

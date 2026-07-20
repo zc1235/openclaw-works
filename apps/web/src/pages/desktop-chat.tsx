@@ -77,20 +77,6 @@ function extractText(msg: Record<string, unknown>): string {
   return "";
 }
 
-function formatRelative(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString();
-}
-
 function makeLocalMessageId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -426,87 +412,45 @@ export function DesktopChatPage() {
   const noBots = false;
 
   return (
-    <div className="flex h-full">
-      {/* Session sidebar */}
-      <aside className="w-64 shrink-0 border-r border-border flex flex-col">
-        <div className="px-4 py-4 border-b border-border">
-          <button
-            type="button"
-            onClick={handleNewChat}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-1 px-3 py-2 text-[13px] font-medium text-text-primary hover:bg-surface-2"
-          >
-            <MessageSquarePlus size={16} />
-            {t("desktopChat.newChat")}
-          </button>
-          {bots.length > 0 && (
-            <div className="mt-3">
-              <label
-                htmlFor="desktop-chat-bot-select"
-                className="text-[10px] uppercase tracking-[0.12em] text-text-muted font-semibold"
-              >
-                {t("desktopChat.agent")}
-              </label>
-              <select
-                id="desktop-chat-bot-select"
-                value={activeBotId ?? ""}
-                onChange={(event) => setActiveBotId(event.target.value)}
-                disabled={Boolean(activeSession)}
-                className="mt-1 w-full rounded-md border border-border bg-surface-1 px-2 py-1.5 text-[12px] text-text-primary focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
-              >
-                {bots.map((bot) => (
-                  <option key={bot.id} value={bot.id}>
-                    {bot.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {sessionsQuery.isLoading ? (
-            <div className="flex justify-center py-6">
-              <Loader2 className="animate-spin text-text-muted" size={18} />
-            </div>
-          ) : sessions.length === 0 ? (
-            <div className="px-4 py-6 text-[12px] text-text-muted">
-              {t("desktopChat.emptySessions")}
-            </div>
-          ) : (
-            <ul className="py-1">
-              {sessions.map((session) => (
-                <li key={session.id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(`/workspace/chat/${session.sessionKey}`)
-                    }
-                    className={cn(
-                      "w-full text-left px-4 py-2 hover:bg-surface-2 transition-colors",
-                      activeSessionKey === session.sessionKey && "bg-surface-2",
-                    )}
-                  >
-                    <div className="text-[13px] font-medium text-text-primary truncate">
-                      {session.title}
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-text-muted">
-                      {formatRelative(session.lastMessageAt ?? session.updatedAt)}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </aside>
-
-      {/* Main chat pane */}
-      <div className="flex-1 flex flex-col">
+    <div className="flex h-full flex-col">
+      {/* Main chat pane — conversation history lives in the left sidebar */}
+      <div className="flex-1 flex flex-col min-h-0">
         <header className="shrink-0 border-b border-border px-6 py-4 md:pt-8">
-          <h1 className="text-[15px] font-bold text-text-heading">
-            {activeSession?.title ?? t("desktopChat.newChat")}
-          </h1>
-          <div className="mt-0.5 text-[11px] text-text-muted">
-            {t("desktopChat.subtitle")}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-[15px] font-bold text-text-heading truncate">
+                {activeSession?.title ?? t("desktopChat.newChat")}
+              </h1>
+              <div className="mt-0.5 text-[11px] text-text-muted">
+                {t("desktopChat.subtitle")}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {bots.length > 0 && (
+                <select
+                  id="desktop-chat-bot-select"
+                  aria-label={t("desktopChat.agent")}
+                  value={activeBotId ?? ""}
+                  onChange={(event) => setActiveBotId(event.target.value)}
+                  disabled={Boolean(activeSession)}
+                  className="rounded-md border border-border bg-surface-1 px-2 py-1.5 text-[12px] text-text-primary focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-60"
+                >
+                  {bots.map((bot) => (
+                    <option key={bot.id} value={bot.id}>
+                      {bot.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface-1 px-3 py-2 text-[13px] font-medium text-text-primary hover:bg-surface-2"
+              >
+                <MessageSquarePlus size={16} />
+                {t("desktopChat.newChat")}
+              </button>
+            </div>
           </div>
         </header>
 

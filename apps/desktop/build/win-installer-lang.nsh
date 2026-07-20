@@ -1,4 +1,4 @@
-LangString Lang_AdvancedTitle 1033 "Advanced options"
+﻿LangString Lang_AdvancedTitle 1033 "Advanced options"
 LangString Lang_AdvancedTitle 2052 "高级选项"
 
 LangString Lang_AdvancedSubtitle 1033 "Choose where Nexu stores local data"
