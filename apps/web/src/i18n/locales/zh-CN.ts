@@ -115,7 +115,7 @@ const zhCN = {
   "title.settings": "设置 · nexu",
   "title.linkFeishu": "绑定飞书 · nexu",
   "title.connecting": "连接中 · nexu",
-  "title.default": "nexu",
+  "title.default": "灵光办公助手",
 
   // ── Workspace Layout ──
   "layout.brand": "你的数字同事",
@@ -130,6 +130,12 @@ const zhCN = {
   "layout.nav.skills": "技能",
   "layout.nav.settings": "设置",
   "layout.conversations": "对话",
+  "layout.session.moreActions": "更多操作",
+  "layout.session.openWorkspace": "打开工作空间",
+  "layout.session.delete": "删除会话",
+  "layout.session.deleted": "会话已删除",
+  "layout.session.deleteFailed": "删除会话失败",
+  "layout.session.workspaceUnavailable": "工作空间文件夹不可用",
   "layout.signOut": "退出登录",
   "layout.help.title": "帮助",
   "layout.help.docs": "文档",

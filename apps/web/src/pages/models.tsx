@@ -1,25 +1,16 @@
-import { GitHubStarCta } from "@/components/github-star-cta";
 import { ModelPickerDropdown } from "@/components/model-picker-dropdown";
 import { ModelLogo, ProviderLogo } from "@/components/provider-logo";
-import { useAutoUpdate } from "@/hooks/use-auto-update";
 import {
   syncDesktopCloudQueries,
   useDesktopCloudStatus,
 } from "@/hooks/use-desktop-cloud-status";
-import { useGitHubStars } from "@/hooks/use-github-stars";
 import { useLocale } from "@/hooks/use-locale";
-import { getAnalyticsAppMetadata } from "@/lib/analytics-app-metadata";
 import {
   openExternalUrl,
   openLocalFolderUrl,
   pathToFileUrl,
 } from "@/lib/desktop-links";
-import {
-  ANALYTICS_PREFERENCE_STORAGE_KEY,
-  disableAnalytics,
-  initializeAnalytics,
-  track,
-} from "@/lib/tracking";
+import { track } from "@/lib/tracking";
 import { cn } from "@/lib/utils";
 import {
   type ProviderRegistryEntryDto,
@@ -37,14 +28,11 @@ import {
   ExternalLink,
   FolderOpen,
   Globe,
-  Info,
   Loader2,
   LogIn,
   Monitor,
   RefreshCw,
-  Shield,
   Trash2,
-  User,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -54,7 +42,6 @@ import { toast } from "sonner";
 import {
   deleteApiV1ModelProvidersMinimaxOauthLogin,
   getApiInternalDesktopDefaultModel,
-  getApiInternalDesktopPreferences,
   getApiInternalDesktopReady,
   getApiV1ModelProvidersByProviderIdOauthProviderStatus,
   getApiV1ModelProvidersByProviderIdOauthStatus,
@@ -62,7 +49,6 @@ import {
   getApiV1ModelProvidersMinimaxOauthStatus,
   getApiV1ModelProvidersRegistry,
   getApiV1Models,
-  patchApiInternalDesktopPreferences,
   postApiInternalDesktopCloudConnect,
   postApiInternalDesktopCloudDisconnect,
   postApiInternalDesktopCloudRefresh,
@@ -396,12 +382,6 @@ export function getSettingsProviderSelectionIdForModel(
   );
 }
 
-type SettingsTab = "general" | "providers";
-
-function isSettingsTab(value: string | null): value is SettingsTab {
-  return value === "general" || value === "providers";
-}
-
 const ZAI_CODING_PLAN_MODELS = [
   "glm-5",
   "glm-4.7",
@@ -622,17 +602,8 @@ function createCustomProviderDraft(id: string): CustomProviderDraft {
 function _GeneralSettings() {
   const { t } = useTranslation();
   const { locale, setLocale } = useLocale();
-  const update = useAutoUpdate();
   const queryClient = useQueryClient();
-  const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [accountConnecting, setAccountConnecting] = useState(false);
-  const [accountDisconnecting, setAccountDisconnecting] = useState(false);
-  const [showAccountLogoutConfirm, setShowAccountLogoutConfirm] =
-    useState(false);
-  const [crashReportsEnabled, setCrashReportsEnabled] = useState(true);
   const hostBridge = getModelsHostInvokeBridge();
-  const { data: desktopCloudStatus, refetch: refetchDesktopCloudStatus } =
-    useDesktopCloudStatus();
   const isWindowsPlatform =
     typeof navigator !== "undefined" &&
     navigator.userAgent.toLowerCase().includes("windows");
@@ -673,296 +644,8 @@ function _GeneralSettings() {
     },
   });
 
-  const { data: desktopPreferences } = useQuery({
-    queryKey: ["desktop-preferences"],
-    queryFn: async () => {
-      const { data } = await getApiInternalDesktopPreferences();
-      return data;
-    },
-  });
-
-  const updateDesktopPreferences = useMutation({
-    mutationFn: async (input: { analyticsEnabled: boolean }) => {
-      const response = await patchApiInternalDesktopPreferences({
-        body: { analyticsEnabled: input.analyticsEnabled },
-      });
-      if (!response.data) {
-        throw new Error("Desktop preferences update returned no data.");
-      }
-      return response.data;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["desktop-preferences"], data);
-      try {
-        localStorage.setItem(
-          ANALYTICS_PREFERENCE_STORAGE_KEY,
-          data.analyticsEnabled ? "1" : "0",
-        );
-      } catch {
-        // ignore local persistence failures
-      }
-
-      if (data.analyticsEnabled) {
-        const posthogApiKey = import.meta.env.VITE_POSTHOG_API_KEY;
-        if (posthogApiKey) {
-          const { appName, appVersion } = getAnalyticsAppMetadata();
-          initializeAnalytics({
-            apiKey: posthogApiKey,
-            apiHost: import.meta.env.VITE_POSTHOG_HOST,
-            environment: import.meta.env.MODE,
-            appName,
-            appVersion,
-          });
-        }
-      } else {
-        disableAnalytics();
-      }
-    },
-    onError: () => {
-      toast.error(t("settings.desktop.updateFailed"));
-    },
-  });
-
-  useEffect(() => {
-    const hostBridge = getModelsHostInvokeBridge();
-    if (!hostBridge) {
-      return;
-    }
-
-    let cancelled = false;
-    void hostBridge
-      .invoke("update:get-current-version", undefined)
-      .then((result) => {
-        if (!cancelled) {
-          setAppVersion(result.version);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAppVersion(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const cloudConnected = desktopCloudStatus?.connected ?? false;
-  const displayEmail =
-    desktopCloudStatus?.userEmail?.trim() || t("settings.general.loggedOut");
-  const accountActionBusy = accountConnecting || accountDisconnecting;
-  const updateAction = (() => {
-    switch (update.phase) {
-      case "checking":
-        return {
-          label: t("settings.updates.checking"),
-          onClick: () => void update.check(),
-          disabled: true,
-        };
-      case "available":
-        return {
-          label: t("layout.update.download"),
-          onClick: () => void update.download(),
-          disabled: false,
-        };
-      case "downloading":
-        return {
-          label: t("settings.updates.downloading", {
-            percent: Math.round(update.percent),
-          }),
-          onClick: () => void update.download(),
-          disabled: true,
-        };
-      case "installing":
-        return {
-          label: t("layout.update.installing"),
-          onClick: () => void update.install(),
-          disabled: true,
-        };
-      case "ready":
-        return {
-          label: t("layout.update.install"),
-          onClick: () => void update.install(),
-          disabled: false,
-        };
-      case "error":
-        return {
-          label: t("settings.updates.retry"),
-          onClick: () => void update.check(),
-          disabled: false,
-        };
-      default:
-        return {
-          label: t("settings.updates.checkNow"),
-          onClick: () => void update.check(),
-          disabled: false,
-        };
-    }
-  })();
-  const updateStatusText = (() => {
-    switch (update.phase) {
-      case "checking":
-        return t("settings.updates.checkingHint");
-      case "available":
-        return t("layout.update.available", {
-          version: update.version ?? appVersion ?? "",
-        });
-      case "downloading":
-        return t("settings.updates.downloadingHint", {
-          percent: Math.round(update.percent),
-        });
-      case "installing":
-        return t("layout.update.installing");
-      case "ready":
-        return t("layout.update.readyToInstall");
-      case "error":
-        return update.errorMessage ?? t("settings.updates.error");
-      default:
-        return appVersion ? null : t("settings.updates.versionUnknown");
-    }
-  })();
-
-  useEffect(() => {
-    if (!accountConnecting) {
-      return;
-    }
-
-    const interval = window.setInterval(async () => {
-      try {
-        const result = await refetchDesktopCloudStatus();
-        if (result.data?.connected) {
-          setAccountConnecting(false);
-          await syncDesktopCloudQueries(queryClient);
-        }
-      } catch {
-        /* ignore */
-      }
-    }, 2000);
-
-    return () => window.clearInterval(interval);
-  }, [accountConnecting, queryClient, refetchDesktopCloudStatus]);
-
-  const handleAccountLogin = async () => {
-    if (accountActionBusy) {
-      return;
-    }
-
-    track("welcome_option_click", { option: "nexu_account" });
-    setAccountConnecting(true);
-
-    try {
-      let { data } = await postApiInternalDesktopCloudConnect({
-        body: { source: "settings" },
-      });
-
-      if (data?.error === "Already connected. Disconnect first.") {
-        await syncDesktopCloudQueries(queryClient);
-        setAccountConnecting(false);
-        return;
-      }
-
-      if (data?.error) {
-        await postApiInternalDesktopCloudDisconnect().catch(() => {});
-        ({ data } = await postApiInternalDesktopCloudConnect({
-          body: { source: "settings" },
-        }));
-      }
-
-      if (data?.error) {
-        toast.error(data.error ?? t("welcome.connectFailed"));
-        setAccountConnecting(false);
-        return;
-      }
-
-      if (data?.browserUrl) {
-        await openExternalUrl(data.browserUrl);
-        toast.info(t("welcome.browserOpened"));
-        return;
-      }
-
-      const result = await refetchDesktopCloudStatus();
-      if (result.data?.connected) {
-        await syncDesktopCloudQueries(queryClient);
-        setAccountConnecting(false);
-        return;
-      }
-
-      setAccountConnecting(false);
-    } catch {
-      toast.error(t("welcome.cloudConnectError"));
-      setAccountConnecting(false);
-    }
-  };
-
-  const handleAccountLogout = async () => {
-    if (accountActionBusy) {
-      return;
-    }
-
-    setAccountDisconnecting(true);
-    try {
-      await postApiInternalDesktopCloudDisconnect().catch(() => {});
-      await syncDesktopCloudQueries(queryClient);
-      setShowAccountLogoutConfirm(false);
-    } finally {
-      setAccountDisconnecting(false);
-    }
-  };
-
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <div className="border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <User size={14} className="text-text-secondary" />
-            <div className="text-[13px] font-semibold text-text-primary">
-              {t("settings.general.account")}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-4 px-5 py-4">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12px] font-medium text-text-primary">
-              {displayEmail}
-            </div>
-            <div className="mt-0.5 text-[11px] text-text-tertiary">
-              {cloudConnected
-                ? t("settings.general.emailHint")
-                : t("settings.general.loggedOutHint")}
-            </div>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={accountActionBusy}
-            onClick={() =>
-              void (cloudConnected
-                ? setShowAccountLogoutConfirm(true)
-                : handleAccountLogin())
-            }
-          >
-            {accountActionBusy
-              ? t("common.loading")
-              : cloudConnected
-                ? t("layout.signOut")
-                : t("settings.general.goLogin")}
-          </Button>
-        </div>
-      </div>
-
-      <LogoutConfirmDialog
-        open={showAccountLogoutConfirm}
-        onOpenChange={setShowAccountLogoutConfirm}
-        pending={accountDisconnecting}
-        title={t("settings.general.logoutConfirmTitle")}
-        description={t("settings.general.logoutConfirmDescription")}
-        confirmLabel={t("layout.signOut")}
-        cancelLabel={t("common.cancel")}
-        onConfirm={() => void handleAccountLogout()}
-      />
-
       <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
         <div className="border-b border-border px-5 py-4">
           <div className="flex items-center gap-2">
@@ -1075,176 +758,6 @@ function _GeneralSettings() {
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <div className="border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <Shield size={14} className="text-text-secondary" />
-            <div className="text-[13px] font-semibold text-text-primary">
-              {t("settings.section.data")}
-            </div>
-          </div>
-        </div>
-        <div className="divide-y divide-border">
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-text-primary">
-                {t("settings.data.analytics")}
-              </div>
-              <div className="mt-0.5 text-[11px] text-text-tertiary">
-                {t("settings.data.analyticsHint")}
-              </div>
-            </div>
-            <Switch
-              checked={desktopPreferences?.analyticsEnabled ?? true}
-              disabled={updateDesktopPreferences.isPending}
-              onCheckedChange={(checked) => {
-                void updateDesktopPreferences.mutateAsync({
-                  analyticsEnabled: checked,
-                });
-              }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-text-primary">
-                {t("settings.data.crashReports")}
-              </div>
-              <div className="mt-0.5 text-[11px] text-text-tertiary">
-                {t("settings.data.crashReportsHint")}
-              </div>
-            </div>
-            <Switch
-              checked={crashReportsEnabled}
-              onCheckedChange={setCrashReportsEnabled}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <div className="border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <RefreshCw size={14} className="text-text-secondary" />
-            <div className="text-[13px] font-semibold text-text-primary">
-              {t("settings.section.updates")}
-            </div>
-          </div>
-        </div>
-        <div className="px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-text-primary">
-                {t("settings.updates.version")}
-              </div>
-              <div className="mt-0.5 text-[11px] text-text-tertiary">
-                {appVersion ?? "—"}
-              </div>
-              {updateStatusText ? (
-                <div
-                  className={cn(
-                    "mt-2 text-[11px]",
-                    update.phase === "error"
-                      ? "text-[var(--color-danger)]"
-                      : "text-text-tertiary",
-                  )}
-                >
-                  {updateStatusText}
-                </div>
-              ) : null}
-              {(update.phase === "downloading" ||
-                update.phase === "installing") && (
-                <div className="mt-3 h-1.5 w-full max-w-[240px] overflow-hidden rounded-full bg-border">
-                  <div
-                    className="h-full rounded-full bg-[var(--color-brand-primary)] transition-all duration-300 ease-out"
-                    style={{
-                      width:
-                        update.phase === "installing"
-                          ? "100%"
-                          : `${Math.round(update.percent)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={updateAction.disabled}
-              onClick={updateAction.onClick}
-            >
-              {update.phase === "checking" ||
-              update.phase === "downloading" ||
-              update.phase === "installing" ? (
-                <Loader2 className="animate-spin" />
-              ) : null}
-              {updateAction.label}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
-        <div className="border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <Info size={14} className="text-text-secondary" />
-            <div className="text-[13px] font-semibold text-text-primary">
-              {t("settings.section.about")}
-            </div>
-          </div>
-        </div>
-        <div className="px-5 py-4">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent/10 to-accent/5">
-              <img
-                src="/brand/logo-black-1.svg"
-                alt="nexu"
-                className="h-6 w-6 object-contain"
-              />
-            </div>
-            <div>
-              <div className="text-[13px] font-semibold text-text-primary">
-                nexu
-              </div>
-              <div className="text-[11px] text-text-tertiary">
-                {appVersion ?? "Desktop client"}
-              </div>
-            </div>
-          </div>
-          <div className="space-y-1">
-            {[
-              { label: t("settings.about.docs"), url: "https://docs.nexu.io" },
-              {
-                label: t("settings.about.github"),
-                url: "https://github.com/nexu-io/nexu",
-              },
-              {
-                label: t("settings.about.changelog"),
-                url: "https://github.com/nexu-io/nexu/releases",
-              },
-              {
-                label: t("settings.about.feedback"),
-                url: "https://github.com/nexu-io/nexu/issues/new",
-              },
-            ].map((link) => (
-              <button
-                key={link.label}
-                type="button"
-                onClick={() => void openExternalUrl(link.url)}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-[12px] font-medium text-text-secondary transition-colors hover:bg-surface-2 hover:text-text-primary"
-              >
-                <ExternalLink size={13} className="shrink-0 text-text-muted" />
-                {link.label}
-                <ArrowUpRight
-                  size={10}
-                  className="ml-auto shrink-0 text-text-muted"
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1422,7 +935,6 @@ function AddCustomProviderDetail({
 
 export function ModelsPage() {
   const { t } = useTranslation();
-  const { stars: starNexu } = useGitHubStars();
   const isDesktopClient = useMemo(
     () =>
       typeof navigator !== "undefined" &&
@@ -1431,12 +943,6 @@ export function ModelsPage() {
   );
   const [searchParams, setSearchParams] = useSearchParams();
   const isSetupMode = searchParams.get("setup") === "1";
-  const tabParam = searchParams.get("tab");
-  const settingsTab = isSettingsTab(tabParam)
-    ? tabParam
-    : isSetupMode
-      ? "providers"
-      : "general";
   const providerParam = searchParams.get("provider");
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
     providerParam ?? (isSetupMode ? "anthropic" : null),
@@ -1802,16 +1308,6 @@ export function ModelsPage() {
     clearSetupParam();
   }, [clearSetupParam]);
 
-  const changeSettingsTab = useCallback(
-    (tab: SettingsTab) => {
-      const next = new URLSearchParams(searchParams);
-      next.set("tab", tab);
-      next.delete("setup");
-      setSearchParams(next, { replace: true });
-    },
-    [searchParams, setSearchParams],
-  );
-
   // Auto-select first model after provider save
   const handleAutoSelectModel = useCallback(
     (firstModelId: string) => {
@@ -1846,61 +1342,23 @@ export function ModelsPage() {
             title={t("models.pageTitle")}
             description={t("models.pageSubtitle")}
             actions={
-              <>
-                <GitHubStarCta
-                  label={t("home.starGithub")}
-                  stars={starNexu}
-                  variant="button"
-                  onClick={() =>
-                    track("workspace_github_click", { source: "settings" })
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    void handleOpenWorkspace();
-                  }}
-                >
-                  <FolderOpen size={13} />
-                  {t("settings.providers.workspace")}
-                </Button>
-              </>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void handleOpenWorkspace();
+                }}
+              >
+                <FolderOpen size={13} />
+                {t("settings.providers.workspace")}
+              </Button>
             }
           />
-
-          <div className="mt-4 flex items-center gap-0 border-b border-border">
-            {[
-              { id: "general" as SettingsTab, label: t("settings.tabGeneral") },
-              {
-                id: "providers" as SettingsTab,
-                label: t("settings.tabProviders"),
-              },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => changeSettingsTab(tab.id)}
-                className={cn(
-                  "relative px-4 py-2.5 text-[13px] font-medium transition-colors",
-                  settingsTab === tab.id
-                    ? "text-text-primary"
-                    : "text-text-muted hover:text-text-secondary",
-                )}
-              >
-                {tab.label}
-                {settingsTab === tab.id ? (
-                  <span className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-accent" />
-                ) : null}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {settingsTab === "general" ? (
+        <div className="space-y-6">
           <_GeneralSettings />
-        ) : (
           <div className="space-y-6">
             <div className="rounded-xl border border-border bg-surface-1 px-4 py-3.5">
               <div className="flex items-center justify-between gap-4">
@@ -2163,7 +1621,7 @@ export function ModelsPage() {
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

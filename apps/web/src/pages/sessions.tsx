@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpRight,
-  CheckCircle2,
   FolderOpen,
   Loader2,
   MessageSquare,
@@ -204,44 +203,6 @@ function formatRelativeTime(iso: string | null | undefined): string {
   return d.toLocaleDateString();
 }
 
-function formatToolCallSummary(summary: string | null): string | null {
-  if (!summary) return null;
-
-  const uppercaseTokens = new Set([
-    "api",
-    "ci",
-    "csv",
-    "db",
-    "gh",
-    "pdf",
-    "qa",
-    "sql",
-    "ui",
-    "ux",
-  ]);
-
-  const formatted = summary
-    .split(/[_-\s]+/)
-    .filter(Boolean)
-    .map((token) => {
-      const normalized = token.trim();
-      if (normalized.length === 0) return "";
-      if (/^[A-Z0-9]+$/.test(normalized)) return normalized;
-      if (uppercaseTokens.has(normalized.toLowerCase())) {
-        return normalized.toUpperCase();
-      }
-      return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-    })
-    .join(" ")
-    .trim();
-
-  if (formatted.length === 0 || formatted.toLowerCase() === "tool") {
-    return null;
-  }
-
-  return formatted;
-}
-
 type Platform =
   | "slack"
   | "discord"
@@ -423,31 +384,6 @@ interface ChatMessageData {
   createdAt: string | null;
 }
 
-function ArtifactCard({ summary }: { summary: string | null }) {
-  const { t } = useTranslation();
-  const formattedSummary =
-    formatToolCallSummary(summary) ?? t("sessions.chat.toolActivity");
-
-  return (
-    <div
-      data-tool-card={summary ?? undefined}
-      data-tool-card-variant="inline-chip"
-      className="mt-0.5 inline-flex max-w-full items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--color-success)_12%,transparent)] bg-[rgba(0,163,101,0.06)] px-2.5 py-1.5 text-[12px] shadow-none"
-    >
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-success-muted)] text-[var(--color-success)]">
-        <CheckCircle2 className="size-[13px]" />
-      </span>
-      <span className="min-w-0 max-w-[16rem] truncate font-medium text-text-primary">
-        {formattedSummary}
-      </span>
-      <span className="shrink-0 text-text-muted/70">·</span>
-      <span className="shrink-0 text-[11px] font-medium text-[var(--color-success)]">
-        {t("sessions.chat.toolCompleted")}
-      </span>
-    </div>
-  );
-}
-
 function ReplyContextCard({
   text,
   isBot,
@@ -511,8 +447,7 @@ function ChatBubble({
 }) {
   const resolvedExtracted =
     extracted ?? extractMessage(msg as unknown as Record<string, unknown>);
-  const { text, replyContextText, senderName, hasToolCall, toolCallSummary } =
-    resolvedExtracted;
+  const { text, replyContextText, senderName } = resolvedExtracted;
   const time = formatTs(msg.timestamp);
   const isBot = msg.role === "assistant";
   const hasText = text.trim().length > 0;
@@ -567,7 +502,6 @@ function ChatBubble({
             <ChatMarkdown content={text} />
           </div>
         )}
-        {isBot && hasToolCall && <ArtifactCard summary={toolCallSummary} />}
         {time && (
           <div
             className={`text-[10px] text-text-muted ${isBot ? "pl-1" : "pr-1 text-right"}`}
@@ -818,11 +752,14 @@ export function SessionsPage() {
                   ),
                 }))
                 .filter(({ extracted }) => {
-                  const { text, replyContextText, hasToolCall } = extracted;
+                  // Hide tool-call-only turns from the IM conversation view.
+                  // These previously rendered as a "tool activity" chip (and
+                  // could appear as "..." placeholders); we now omit them
+                  // entirely and only show real user/assistant text.
+                  const { text, replyContextText } = extracted;
                   return (
                     text.trim().length > 0 ||
-                    (replyContextText?.trim().length ?? 0) > 0 ||
-                    hasToolCall
+                    (replyContextText?.trim().length ?? 0) > 0
                   );
                 })
                 .map(({ msg, extracted }) => (

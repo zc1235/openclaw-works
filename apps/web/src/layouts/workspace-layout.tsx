@@ -11,7 +11,11 @@ import {
 import { useDesktopCloudStatus } from "@/hooks/use-desktop-cloud-status";
 import { useDesktopRewardsStatus } from "@/hooks/use-desktop-rewards";
 import { authClient } from "@/lib/auth-client";
-import { openExternalUrl } from "@/lib/desktop-links";
+import {
+  getSessionFolderUrl,
+  openExternalUrl,
+  openLocalFolderUrl,
+} from "@/lib/desktop-links";
 import {
   isMacDesktopPlatform,
   isWindowsDesktopPlatform,
@@ -25,16 +29,16 @@ import {
   Cable,
   ChevronRight,
   ChevronUp,
-  CircleHelp,
+  FolderOpen,
   Info,
-  Mail,
   Menu,
   MessageSquare,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  ScrollText,
   Settings,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,7 +51,13 @@ import {
   useNavigate,
 } from "react-router-dom";
 import "@/lib/api";
-import { getApiV1Me, getApiV1Sessions } from "../../lib/api/sdk.gen";
+import { toast } from "sonner";
+import {
+  deleteApiV1SessionsById,
+  getApiV1Me,
+  getApiV1Sessions,
+  getApiV1SessionsById,
+} from "../../lib/api/sdk.gen";
 
 interface SidebarSession {
   id: string;
@@ -211,7 +221,6 @@ function EmptyState({ onGoConfig }: { onGoConfig: () => void }) {
 // flow that no longer exists after nexu accounts were removed. The
 // localStorage key itself may still be present from older installs and is
 // harmless — nothing reads it now.
-const GITHUB_URL = "https://github.com/nexu-io/nexu";
 function resolveCloudUsageUrl(cloudUrl?: string | null): string {
   if (!cloudUrl) return "https://nexu.io/workspace/usage";
   try {
@@ -222,12 +231,146 @@ function resolveCloudUsageUrl(cloudUrl?: string | null): string {
   }
 }
 
-const GitHubIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <title>GitHub</title>
-    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-  </svg>
-);
+function SidebarSessionRow({
+  session,
+  isActive,
+  onOpen,
+}: {
+  session: SidebarSession;
+  isActive: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
+
+  const handleOpenWorkspace = async () => {
+    setMenuOpen(false);
+    try {
+      const { data } = await getApiV1SessionsById({
+        path: { id: session.id },
+      });
+      const folderUrl = getSessionFolderUrl(
+        (data?.metadata as Record<string, unknown> | null | undefined) ?? null,
+      );
+      if (!folderUrl) {
+        toast.error(t("layout.session.workspaceUnavailable"));
+        return;
+      }
+      await openLocalFolderUrl(folderUrl);
+    } catch {
+      toast.error(t("layout.session.workspaceUnavailable"));
+    }
+  };
+
+  const handleDelete = async () => {
+    setMenuOpen(false);
+    try {
+      await deleteApiV1SessionsById({ path: { id: session.id } });
+      await queryClient.invalidateQueries({ queryKey: ["sidebar-sessions"] });
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      if (isActive) {
+        navigate("/workspace/chat");
+      }
+      toast.success(t("layout.session.deleted"));
+    } catch {
+      toast.error(t("layout.session.deleteFailed"));
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "group relative flex items-center rounded-[10px] transition-colors",
+        isActive && "nav-item-active",
+      )}
+      data-sidebar-session-row={session.id}
+      data-session-channel-type={session.channelType ?? "web"}
+      data-session-state={session.status || "idle"}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex flex-1 min-w-0 items-center gap-2.5 cursor-pointer px-3 py-2 text-left"
+      >
+        <SidebarPlatformIcon platform={session.channelType ?? "web"} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={cn(
+                "text-[12px] truncate whitespace-nowrap font-medium",
+                !isActive && "text-text-primary",
+              )}
+            >
+              {session.title}
+            </div>
+            {session.status === "active" && (
+              <span className="shrink-0 rounded-full bg-[var(--color-success-subtle)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-success)]">
+                Live
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-text-muted truncate whitespace-nowrap">
+            <span>{getPlatformLabel(session.channelType ?? "web")}</span>
+            <span className="text-border">·</span>
+            <span>{formatTime(session.lastTime)}</span>
+          </div>
+        </div>
+      </button>
+      <div className="relative mr-1 shrink-0" ref={menuRef}>
+        <button
+          type="button"
+          aria-label={t("layout.session.moreActions")}
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpen((prev) => !prev);
+          }}
+          className={cn(
+            "flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary",
+            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          )}
+        >
+          <MoreHorizontal size={14} />
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface-1 shadow-xl shadow-black/10">
+            <div className="p-1.5">
+              <button
+                type="button"
+                onClick={() => void handleOpenWorkspace()}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] font-medium text-text-secondary transition-all hover:bg-surface-2 hover:text-text-primary"
+              >
+                <FolderOpen size={14} />
+                {t("layout.session.openWorkspace")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] font-medium text-text-muted transition-all hover:bg-red-500/5 hover:text-red-500"
+              >
+                <Trash2 size={13} />
+                {t("layout.session.delete")}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface UpdateFloatCardProps {
   phase: ReturnType<typeof useAutoUpdate>["phase"];
@@ -386,7 +529,6 @@ function WorkspaceLayoutInner() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showHelpMenu, setShowHelpMenu] = useState(false);
   const {
     status: rewardsStatus,
     loading: rewardsStatusLoading,
@@ -453,7 +595,6 @@ function WorkspaceLayoutInner() {
 
   const [showBalancePopup, setShowBalancePopup] = useState(false);
   const logoutRef = useRef<HTMLDivElement>(null);
-  const helpRef = useRef<HTMLDivElement>(null);
   const balanceRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -510,17 +651,6 @@ function WorkspaceLayoutInner() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [showLogoutConfirm]);
-
-  useEffect(() => {
-    if (!showHelpMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
-        setShowHelpMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showHelpMenu]);
 
   useEffect(() => {
     if (!showBalancePopup) return;
@@ -797,7 +927,7 @@ function WorkspaceLayoutInner() {
                 <BrandMark className="w-7 h-7 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-text-primary whitespace-nowrap">
-                    Nexu <span className="text-[11px]">🦞</span>
+                    灵光办公助手
                   </div>
                   <div className="text-[10px] text-text-tertiary whitespace-nowrap">
                     {t("layout.brand")}
@@ -899,13 +1029,11 @@ function WorkspaceLayoutInner() {
               {sessions.map((s) => {
                 const isActive = selectedSessionId === s.id;
                 return (
-                  <button
-                    type="button"
+                  <SidebarSessionRow
                     key={s.id}
-                    data-sidebar-session-row={s.id}
-                    data-session-channel-type={s.channelType ?? "web"}
-                    data-session-state={s.status || "idle"}
-                    onClick={() => {
+                    session={s}
+                    isActive={isActive}
+                    onOpen={() => {
                       const channel = normalizeChannel(s.channelType);
                       track("workspace_channel_click", {
                         channel_type: s.channelType,
@@ -916,40 +1044,7 @@ function WorkspaceLayoutInner() {
                       });
                       navigate(`/workspace/sessions/${s.id}`);
                     }}
-                    className={cn(
-                      "group flex items-center gap-2.5 w-full rounded-[10px] transition-colors cursor-pointer px-3 py-2 text-left",
-                      isActive && "nav-item-active",
-                    )}
-                  >
-                    <SidebarPlatformIcon platform={s.channelType ?? "web"} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className={cn(
-                            "text-[12px] truncate whitespace-nowrap font-medium",
-                            !isActive && "text-text-primary",
-                          )}
-                        >
-                          {s.title}
-                        </div>
-                        {s.status === "active" && (
-                          <span className="shrink-0 rounded-full bg-[var(--color-success-subtle)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-success)]">
-                            Live
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-text-muted truncate whitespace-nowrap">
-                        <span>{getPlatformLabel(s.channelType ?? "web")}</span>
-                        <span className="text-border">·</span>
-                        <span>{formatTime(s.lastTime)}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      {s.status === "active" && (
-                        <div className="w-2 h-2 rounded-full bg-[var(--color-success)] shrink-0" />
-                      )}
-                    </div>
-                  </button>
+                  />
                 );
               })}
             </div>
@@ -983,85 +1078,6 @@ function WorkspaceLayoutInner() {
               {t("layout.nav.settings")}
             </span>
           </button>
-
-          <div className="flex items-center gap-1 shrink-0">
-            <div className="relative" ref={helpRef}>
-              {showHelpMenu && (
-                <div className="absolute z-20 bottom-full left-1/2 mb-2 w-44 -translate-x-1/2">
-                  <div className="rounded-xl border bg-surface-1 border-border shadow-xl shadow-black/10 overflow-hidden">
-                    <div className="p-1.5">
-                      <a
-                        href="https://docs.nexu.io/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() =>
-                          track("workspace_docs_click", { type: "doc" })
-                        }
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[12px] font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-all"
-                      >
-                        <BookOpen size={14} />
-                        {t("layout.help.docs")}
-                      </a>
-                      <a
-                        href="mailto:hi@nexu.ai"
-                        onClick={() =>
-                          track("workspace_docs_click", { type: "contact" })
-                        }
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[12px] font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-all"
-                      >
-                        <Mail size={14} />
-                        {t("layout.help.contact")}
-                      </a>
-                    </div>
-                    <div className="border-t border-border p-1.5">
-                      <a
-                        href="https://github.com/nexu-io/nexu/releases"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() =>
-                          track("workspace_docs_click", { type: "changelog" })
-                        }
-                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[12px] font-medium text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-all"
-                      >
-                        <ScrollText size={14} />
-                        {t("layout.help.changelog")}
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!showHelpMenu) {
-                    track("workspace_help_menu_open");
-                  }
-                  setShowHelpMenu(!showHelpMenu);
-                }}
-                className={cn(
-                  "w-7 h-7 flex items-center justify-center rounded-md transition-colors cursor-pointer",
-                  showHelpMenu
-                    ? "text-text-primary bg-surface-2"
-                    : "text-text-secondary hover:text-text-primary hover:bg-surface-2",
-                )}
-                title={t("layout.help.title")}
-              >
-                <CircleHelp size={16} />
-              </button>
-            </div>
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() =>
-                track("workspace_github_click", { source: "sidebar" })
-              }
-              className="w-7 h-7 flex items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-colors"
-              title="GitHub"
-            >
-              <GitHubIcon />
-            </a>
-          </div>
         </div>
 
         {/* Account block — removed with nexu accounts */}
@@ -1086,7 +1102,7 @@ function WorkspaceLayoutInner() {
                   <BrandMark className="w-7 h-7 shrink-0" />
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-text-primary truncate">
-                      Nexu <span className="text-[11px]">🦞</span>
+                      灵光办公助手
                     </div>
                     <div className="text-[10px] text-text-tertiary">
                       {t("layout.brand")}
