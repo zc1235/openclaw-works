@@ -6,7 +6,6 @@ import { SlackOAuthView } from "@/components/channel-setup/slack-oauth-view";
 import { TelegramSetupView } from "@/components/channel-setup/telegram-setup-view";
 import { WechatSetupView } from "@/components/channel-setup/wechat-setup-view";
 import { WecomSetupView } from "@/components/channel-setup/wecom-setup-view";
-import { WhatsappSetupView } from "@/components/channel-setup/whatsapp-setup-view";
 import { useBotQuota } from "@/hooks/use-bot-quota";
 import { useCountdown } from "@/hooks/use-countdown";
 import { getChannelChatUrl } from "@/lib/channel-links";
@@ -51,7 +50,6 @@ type Platform =
   | "wecom"
   | "wechat"
   | "telegram"
-  | "whatsapp"
   | "qqbot";
 
 type LiveStatusData = {
@@ -65,7 +63,6 @@ type LiveStatusData = {
 };
 
 const PLATFORMS: { id: Platform; emoji: string; desc: string }[] = [
-  { id: "whatsapp", emoji: "\u{1F4DE}", desc: "Personal WhatsApp" },
   { id: "wechat", emoji: "\u{1F4AC}", desc: "Personal WeChat" },
   { id: "telegram", emoji: "\u{2708}\u{FE0F}", desc: "Telegram Bot" },
   { id: "dingtalk", emoji: "\u{1F4F1}", desc: "DingTalk Bot" },
@@ -84,7 +81,6 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   wecom: "WeCom",
   wechat: "WeChat",
   telegram: "Telegram",
-  whatsapp: "WhatsApp",
   qqbot: "QQ",
 };
 
@@ -163,7 +159,7 @@ export function ChannelsPage() {
       </div>
 
       {/* Platform selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
         {PLATFORMS.map((p) => {
           const isActive = platform === p.id;
           const configuredChannel = channels.find(
@@ -181,7 +177,7 @@ export function ChannelsPage() {
               type="button"
               key={p.id}
               onClick={() => handlePlatformChange(p.id)}
-              className={`relative flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all cursor-pointer ${
+              className={`relative flex flex-row flex-nowrap items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all cursor-pointer ${
                 isActive
                   ? "bg-accent/5 border-2 border-accent/40 shadow-sm"
                   : "bg-surface-1 border border-border hover:border-border-hover hover:bg-surface-2"
@@ -196,11 +192,11 @@ export function ChannelsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div
-                  className={`text-[13px] font-semibold ${isActive ? "text-accent" : "text-text-primary"}`}
+                  className={`truncate text-[13px] font-semibold ${isActive ? "text-accent" : "text-text-primary"}`}
                 >
                   {PLATFORM_LABELS[p.id]}
                 </div>
-                <div className="text-[10px] text-text-muted mt-0.5">
+                <div className="truncate text-[10px] text-text-muted mt-0.5">
                   {p.desc}
                 </div>
               </div>
@@ -278,11 +274,6 @@ export function ChannelsPage() {
           />
         ) : platform === "wecom" ? (
           <WecomSetupView
-            onConnected={handleConnected}
-            disabled={quotaLimited}
-          />
-        ) : platform === "whatsapp" ? (
-          <WhatsappSetupView
             onConnected={handleConnected}
             disabled={quotaLimited}
           />

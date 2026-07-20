@@ -111,19 +111,20 @@ describe("SessionsPage", () => {
     expect(markup).toContain("<title>Slack</title>");
     expect(markup).toContain("<p>Can you summarize tomorrow's meetings?</p>");
     expect(markup).not.toContain("[message_id:");
-    expect(markup).toContain("google-calendar");
     expect(markup).toContain("Open in Slack");
   });
 
-  it("renders assistant tool activity as a compact execution chip", () => {
+  it("hides tool-call activity from the conversation view", () => {
     const markup = renderSessionsPage();
 
     expect(markup).toContain('data-chat-layout="centered"');
-    expect(markup).toContain('data-tool-card="google-calendar"');
-    expect(markup).toContain('data-tool-card-variant="inline-chip"');
-    expect(markup).toContain(">Completed<");
-    expect(markup).toContain("Google Calendar");
+    // Tool-call turns are intentionally omitted from the IM conversation view.
+    expect(markup).not.toContain('data-tool-card="google-calendar"');
+    expect(markup).not.toContain('data-tool-card-variant="inline-chip"');
+    expect(markup).not.toContain(">Completed<");
     expect(markup).not.toContain(">Localized Tool Activity<");
+    // The assistant's actual text is still rendered.
+    expect(markup).toContain("drafted the summary");
   });
 
   it("renders markdown formatting with safe links and escaped raw html", () => {
@@ -516,11 +517,12 @@ describe("SessionsPage", () => {
 
     expect(markup).toContain("已处理完成，全部状态已修正为已上线。");
     expect(markup).not.toContain("[[reply_to_current]]");
-    expect(markup).toContain('data-tool-card="feishu_bitable_list_records"');
-    expect(markup).toContain("Feishu Bitable List Records");
+    // Tool-only turns are hidden from the conversation view.
+    expect(markup).not.toContain('data-tool-card="feishu_bitable_list_records"');
+    expect(markup).not.toContain("Feishu Bitable List Records");
   });
 
-  it("falls back to the localized tool label for placeholder tool names", () => {
+  it("hides placeholder tool-only turns from the conversation", () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: {
@@ -578,12 +580,10 @@ describe("SessionsPage", () => {
       </QueryClientProvider>,
     );
 
-    const fallbackMatches = markup.match(/Localized Tool Activity/g) ?? [];
-
-    expect(markup).toContain('data-tool-card="tool"');
-    expect(markup).toContain('data-tool-card="---"');
-    expect(markup).not.toContain(">Tool<");
-    expect(fallbackMatches).toHaveLength(2);
+    // Placeholder tool-only turns are hidden entirely from the conversation.
+    expect(markup).not.toContain('data-tool-card="tool"');
+    expect(markup).not.toContain('data-tool-card="---"');
+    expect(markup).not.toContain("Localized Tool Activity");
   });
 
   it("renders reply context as quote UI instead of raw metadata", () => {
