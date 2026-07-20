@@ -57,7 +57,7 @@ Var UninstallDeleteLocalDataSelected
 Var UninstallResolvedUserDataDir
 Var UninstallResolvedUserDataDirHandle
 
-Name "${PRODUCT_NAME}"
+Name "灵光办公助手"
 OutFile "${OUTPUT_EXE}"
 InstallDir "$LOCALAPPDATA\Programs\nexu-desktop"
 InstallDirRegKey HKCU "${UNINSTALL_REGKEY}" "InstallLocation"
@@ -504,7 +504,7 @@ FunctionEnd
 
 Function CreateDesktopShortcut
   Call CreateStartMenuShortcutVbs
-  nsExec::ExecToLog '"$SYSDIR\cscript.exe" //NoLogo "$PLUGINSDIR\create-shortcut.vbs" "$DESKTOP\Nexu.lnk" "$INSTDIR\Nexu.exe" "" "$INSTDIR" "$INSTDIR\Nexu.exe,0"'
+  nsExec::ExecToLog '"$SYSDIR\cscript.exe" //NoLogo "$PLUGINSDIR\create-shortcut.vbs" "$DESKTOP\灵光办公助手.lnk" "$INSTDIR\Nexu.exe" "" "$INSTDIR" "$INSTDIR\Nexu.exe,0"'
   Pop $0
   ${If} $0 != "0"
     Push "failed to create desktop shortcut"
@@ -910,10 +910,10 @@ Section "Install"
   Call LogInstallerEvent
 
   WriteUninstaller "$INSTDIR\Uninstall Nexu.exe"
-  CreateDirectory "$SMPROGRAMS\Nexu"
+  CreateDirectory "$SMPROGRAMS\灵光办公助手"
   DetailPrint "$(Lang_StatusFinalizeInstall)"
   Call CreateStartMenuShortcutVbs
-  nsExec::ExecToLog '"$SYSDIR\cscript.exe" //NoLogo "$PLUGINSDIR\create-shortcut.vbs" "$SMPROGRAMS\Nexu\Nexu.lnk" "$INSTDIR\Nexu.exe" "" "$INSTDIR" "$INSTDIR\Nexu.exe,0"'
+  nsExec::ExecToLog '"$SYSDIR\cscript.exe" //NoLogo "$PLUGINSDIR\create-shortcut.vbs" "$SMPROGRAMS\灵光办公助手\灵光办公助手.lnk" "$INSTDIR\Nexu.exe" "" "$INSTDIR" "$INSTDIR\Nexu.exe,0"'
   Pop $0
   ${If} $0 != "0"
     Push "failed to create app Start Menu shortcut"
@@ -921,7 +921,7 @@ Section "Install"
     MessageBox MB_OK|MB_ICONSTOP "$(Lang_ErrorCreateShortcutFailed)"
     Abort
   ${EndIf}
-  nsExec::ExecToLog '"$SYSDIR\cscript.exe" //NoLogo "$PLUGINSDIR\create-shortcut.vbs" "$SMPROGRAMS\Nexu\Uninstall Nexu.lnk" "$INSTDIR\Uninstall Nexu.exe" "" "$INSTDIR" "$INSTDIR\Uninstall Nexu.exe,0"'
+  nsExec::ExecToLog '"$SYSDIR\cscript.exe" //NoLogo "$PLUGINSDIR\create-shortcut.vbs" "$SMPROGRAMS\灵光办公助手\卸载灵光办公助手.lnk" "$INSTDIR\Uninstall Nexu.exe" "" "$INSTDIR" "$INSTDIR\Uninstall Nexu.exe,0"'
   Pop $0
   ${If} $0 != "0"
     Push "failed to create uninstall Start Menu shortcut"
@@ -930,7 +930,7 @@ Section "Install"
     Abort
   ${EndIf}
 
-  WriteRegStr HKCU "${UNINSTALL_REGKEY}" "DisplayName" "${PRODUCT_NAME}"
+  WriteRegStr HKCU "${UNINSTALL_REGKEY}" "DisplayName" "灵光办公助手"
   WriteRegStr HKCU "${UNINSTALL_REGKEY}" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKCU "${UNINSTALL_REGKEY}" "Publisher" "${PRODUCT_PUBLISHER}"
   WriteRegStr HKCU "${UNINSTALL_REGKEY}" "InstallLocation" "$INSTDIR"
@@ -985,10 +985,10 @@ Section "Uninstall"
   DeleteRegValue HKCU "${NEXU_CONFIG_REGKEY}" "PendingUserDataMigrationTarget"
   DeleteRegValue HKCU "${NEXU_CONFIG_REGKEY}" "PendingUserDataMigrationStrategy"
   Call un.CleanupNexuConfigRegistryIfEmpty
-  Delete "$DESKTOP\Nexu.lnk"
-  Delete "$SMPROGRAMS\Nexu\Nexu.lnk"
-  Delete "$SMPROGRAMS\Nexu\Uninstall Nexu.lnk"
-  RMDir "$SMPROGRAMS\Nexu"
+  Delete "$DESKTOP\灵光办公助手.lnk"
+  Delete "$SMPROGRAMS\灵光办公助手\灵光办公助手.lnk"
+  Delete "$SMPROGRAMS\灵光办公助手\卸载灵光办公助手.lnk"
+  RMDir "$SMPROGRAMS\灵光办公助手"
   DeleteRegKey HKCU "${UNINSTALL_REGKEY}"
   DeleteRegKey HKCU "${PRODUCT_DIR_REGKEY}"
   Delete "$INSTDIR\Uninstall Nexu.exe"

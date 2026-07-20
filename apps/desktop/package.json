@@ -75,6 +75,7 @@
     },
     "appId": "io.nexu.desktop",
     "productName": "灵光办公助手",
+    "executableName": "Nexu",
     "icon": "build/icon.icns",
     "directories": {
       "output": "release"
