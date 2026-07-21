@@ -13,6 +13,10 @@ import {
   executeLocalTool,
   summariseToolCall,
 } from "../lib/local-tools.js";
+import {
+  type RunAgentResult,
+  runAgentCompletion,
+} from "../lib/agent-runner.js";
 import { logger } from "../lib/logger.js";
 import { proxyFetch } from "../lib/proxy-fetch.js";
 import type { ControllerBindings } from "../types.js";
@@ -21,6 +25,10 @@ const DESKTOP_CHANNEL_TYPE = "desktop";
 const DESKTOP_SESSION_PREFIX = "desktop-";
 const HISTORY_MESSAGE_LIMIT = 40;
 const MAX_TOOL_ROUNDTRIPS = 200;
+const MAX_SUBAGENTS = 4;
+const MAX_SUBAGENTS_PER_TURN = 4;
+const MAX_SUBAGENT_TOOL_ROUNDS = 20;
+const MAX_SUBAGENT_RESULT_CHARS = 16_000;
 
 // Module-scoped encoder — TextEncoder is a value binding in @types/node
 // (no DOM lib is loaded in controller tsconfig), so it cannot be used as a
@@ -58,6 +66,22 @@ interface StreamAccumulator {
   toolCalls: OpenAiToolCall[];
   finishReason: string | null;
   streamError: string | null;
+}
+
+interface DelegatedSubagentTask {
+  id: string;
+  task: string;
+  instruction: string;
+  model: string;
+}
+
+interface SubagentTrace {
+  id: string;
+  task: string;
+  model: string;
+  status: "completed" | "failed";
+  result?: string;
+  error?: string;
 }
 
 function buildOpenAiCompatUrl(baseUrl: string): string {
@@ -198,6 +222,159 @@ function buildInstalledSkillsSystemPrompt(
     "When the user asks to use a skill, DO NOT claim you lack that capability. First locate its folder (use list_directory on the skill directories above and match the requested name to a slug), then read that folder's SKILL.md with read_file and follow its instructions (run any scripts via run_command). Only say a skill is unavailable after checking these directories and finding no matching folder.",
   );
   return lines.join("\n");
+}
+
+/**
+ * Main-agent-only orchestration tool. Child agents run through the generic
+ * runner, whose tool set intentionally excludes this definition, preventing
+ * recursive fan-out.
+ */
+const DELEGATE_TO_SUBAGENTS_TOOL: OpenAiToolDefinition = {
+  type: "function",
+  function: {
+    name: "delegate_to_subagents",
+    description:
+      "Delegate 2 to 4 independent, non-overlapping workstreams to focused subagents that run in parallel. Use this only when parallel work materially helps. Each subagent returns a deliverable for you to verify and synthesize into the final user answer.",
+    parameters: {
+      type: "object",
+      properties: {
+        tasks: {
+          type: "array",
+          description:
+            "Two to four self-contained tasks. Omit model to inherit your configured model; otherwise use a configured full providerKey/modelId identifier.",
+          items: {
+            type: "object",
+            properties: {
+              id: {
+                type: "string",
+                description: "Stable short identifier for this subagent.",
+              },
+              task: {
+                type: "string",
+                description: "Short description shown to the user.",
+              },
+              instruction: {
+                type: "string",
+                description:
+                  "Complete, self-contained implementation or research instruction for the child.",
+              },
+              model: {
+                type: "string",
+                description:
+                  "Optional configured full providerKey/modelId identifier. Omit to inherit the parent model.",
+              },
+            },
+            required: ["task", "instruction"],
+            additionalProperties: false,
+          },
+          minItems: 2,
+          maxItems: MAX_SUBAGENTS,
+        },
+      },
+      required: ["tasks"],
+      additionalProperties: false,
+    },
+  },
+};
+
+function buildDelegationSystemPrompt(
+  inheritedModel: string,
+  configuredModels: string[],
+): string {
+  const listedModels = configuredModels.slice(0, 80);
+  const availableModels =
+    listedModels.length > 0
+      ? listedModels.join(", ")
+      : "No alternate configured model inventory is available; omit model to inherit.";
+  return [
+    "You can delegate large tasks with independent workstreams using delegate_to_subagents.",
+    "Use it only when parallel work materially improves the result. Give each child a self-contained, non-overlapping instruction and do not delegate trivial or sequential work.",
+    "Pass two to four tasks and make only one delegation call per user turn (at most four children total). Omit a child model to inherit your model, or set model to one of the configured full providerKey/modelId identifiers. Your current inherited model is " +
+      inheritedModel +
+      ".",
+    "Available configured child models: " + availableModels + ".",
+    "Children use dedicated workspace folders and return reports to you. After their reports arrive, you must assess and synthesize them into a single final answer for the user; do not merely repeat raw child output.",
+  ].join("\n");
+}
+
+function truncateSubagentResult(text: string): string {
+  if (text.length <= MAX_SUBAGENT_RESULT_CHARS) {
+    return text;
+  }
+  return `${text.slice(0, MAX_SUBAGENT_RESULT_CHARS)}\n\n[Subagent result truncated for parent context.]`;
+}
+
+function parseDelegatedSubagentTasks(
+  args: Record<string, unknown>,
+  inheritedModel: string,
+): DelegatedSubagentTask[] | { error: string } {
+  const rawTasks = args.tasks;
+  if (!Array.isArray(rawTasks) || rawTasks.length < 2) {
+    return { error: "delegate_to_subagents requires between 2 and 4 tasks." };
+  }
+  if (rawTasks.length > MAX_SUBAGENTS) {
+    return { error: `delegate_to_subagents supports at most ${MAX_SUBAGENTS} tasks.` };
+  }
+
+  const usedIds = new Set<string>();
+  const tasks: DelegatedSubagentTask[] = [];
+  for (const [index, rawTask] of rawTasks.entries()) {
+    if (typeof rawTask !== "object" || rawTask === null) {
+      return { error: `Task ${index + 1} must be an object.` };
+    }
+    const record = rawTask as Record<string, unknown>;
+    const task = typeof record.task === "string" ? record.task.trim() : "";
+    const instruction =
+      typeof record.instruction === "string" ? record.instruction.trim() : "";
+    const requestedId =
+      typeof record.id === "string" ? record.id.trim() : `subagent-${index + 1}`;
+    const id = sanitizeWorkspaceSegment(requestedId).slice(0, 80);
+    const requestedModel =
+      typeof record.model === "string" ? record.model.trim() : "";
+    if (!task || !instruction) {
+      return { error: `Task ${index + 1} must include task and instruction.` };
+    }
+    if (!id || usedIds.has(id)) {
+      return {
+        error: `Task ${index + 1} needs a unique non-empty id.`,
+      };
+    }
+    usedIds.add(id);
+    tasks.push({
+      id,
+      task,
+      instruction,
+      model: requestedModel || inheritedModel,
+    });
+  }
+  return tasks;
+}
+
+function subagentInstruction(task: DelegatedSubagentTask): string {
+  return [
+    "You are a focused subagent working for a parent agent.",
+    "Complete only the assigned workstream below. Do not delegate, do not start unrelated work, and do not ask the user questions; make reasonable implementation decisions and state any assumptions.",
+    "Your workspace is a dedicated folder separate from other subagents' default working directories. Use its local tools as needed. End with a concise, concrete deliverable report for the parent: completed work, key findings, paths/results, and remaining blockers.",
+    `Assigned workstream (${task.task}):`,
+    task.instruction,
+  ].join("\n\n");
+}
+
+async function listConfiguredModelIds(
+  container: ControllerContainer,
+): Promise<string[]> {
+  const config = await container.configStore.getConfig();
+  const providers = config.models?.providers ?? {};
+  return Array.from(
+    new Set(
+      Object.entries(providers).flatMap(([providerKey, provider]) =>
+        provider.models
+          .map((model) => model.id.trim())
+          .filter((modelId) => modelId.length > 0)
+          .map((modelId) => `${providerKey}/${modelId}`),
+      ),
+    ),
+  );
 }
 
 function deriveTitleFromText(text: string): string {
@@ -518,7 +695,7 @@ export function registerDesktopChatRoutes(
             "text/event-stream": { schema: z.string() },
           },
           description:
-            "Server-sent event stream of {type: session|delta|toolCall|done|error} JSON payloads",
+            "Server-sent event stream of {type: session|delta|reasoning|toolCall|subagent|done|error} JSON payloads",
         },
         400: {
           content: {
@@ -569,6 +746,7 @@ export function registerDesktopChatRoutes(
       // Each conversation gets its own workspace folder so the files a chat
       // produces are grouped together and can be opened from the task list.
       const workspaceDir = await ensureWorkspaceDir(sessionKey);
+      const configuredModelIds = await listConfiguredModelIds(container);
 
       const historyMessages: OpenAiChatMessage[] = isNewSession
         ? []
@@ -597,6 +775,13 @@ export function registerDesktopChatRoutes(
       if (skillsPrompt) {
         outgoing.push({ role: "system", content: skillsPrompt });
       }
+      outgoing.push({
+        role: "system",
+        content: buildDelegationSystemPrompt(
+          `${resolved.providerKey}/${resolved.modelId}`,
+          configuredModelIds,
+        ),
+      });
       outgoing.push(...historyMessages);
       outgoing.push({ role: "user", content: body.text });
 
@@ -604,7 +789,10 @@ export function registerDesktopChatRoutes(
       // and modify files and run commands.
       const allowFileWrites =
         !(await container.configStore.getDesktopAgentSandbox());
-      const toolDefinitions = buildLocalToolDefinitions(allowFileWrites);
+      const toolDefinitions = [
+        ...buildLocalToolDefinitions(allowFileWrites),
+        DELEGATE_TO_SUBAGENTS_TOOL,
+      ];
       const localToolOptions = {
         ...(workspaceDir ? { workspaceDir } : {}),
         allowFileWrites,
@@ -625,6 +813,8 @@ export function registerDesktopChatRoutes(
           let assistantText = "";
           let assistantReasoning = "";
           const toolCallLog: Array<{ name: string; summary: string }> = [];
+          const subagentLog: SubagentTrace[] = [];
+          let delegatedSubagentCount = 0;
           let streamError: string | null = null;
           let sawFinalAnswer = false;
 
@@ -662,7 +852,11 @@ export function registerDesktopChatRoutes(
 
             for (const toolCall of result.toolCalls) {
               const args = parseToolArgs(toolCall.function.arguments);
-              const summary = summariseToolCall(toolCall.function.name, args);
+              const isDelegation =
+                toolCall.function.name === DELEGATE_TO_SUBAGENTS_TOOL.function.name;
+              const summary = isDelegation
+                ? `delegate_to_subagents: ${Array.isArray(args.tasks) ? args.tasks.length : 0} subagents`
+                : summariseToolCall(toolCall.function.name, args);
               toolCallLog.push({ name: toolCall.function.name, summary });
               sseController.enqueue(
                 encodeSse({
@@ -680,15 +874,164 @@ export function registerDesktopChatRoutes(
                 },
                 "desktop chat tool call",
               );
-              const execution = await executeLocalTool(
-                toolCall.function.name,
-                args,
-                localToolOptions,
-              );
+
+              let toolResult: string;
+              if (isDelegation) {
+                const inheritedModel = `${resolved.providerKey}/${resolved.modelId}`;
+                const parsedTasks = parseDelegatedSubagentTasks(
+                  args,
+                  inheritedModel,
+                );
+                if ("error" in parsedTasks) {
+                  toolResult = `Unable to delegate: ${parsedTasks.error}`;
+                } else if (
+                  delegatedSubagentCount + parsedTasks.length >
+                  MAX_SUBAGENTS_PER_TURN
+                ) {
+                  toolResult =
+                    `Unable to delegate: this turn already used ${delegatedSubagentCount} of ` +
+                    `${MAX_SUBAGENTS_PER_TURN} permitted subagents. Synthesize the reports already received instead.`;
+                } else {
+                  delegatedSubagentCount += parsedTasks.length;
+                  // At most MAX_SUBAGENTS tasks are accepted, so Promise.all
+                  // here is a deliberately bounded parallel worker pool.
+                  const results = await Promise.all(
+                    parsedTasks.map(async (task): Promise<SubagentTrace> => {
+                      sseController.enqueue(
+                        encodeSse({
+                          type: "subagent",
+                          id: task.id,
+                          task: task.task,
+                          model: task.model,
+                          status: "started",
+                        }),
+                      );
+
+                      let subagentWorkspace: string | undefined;
+                      if (workspaceDir) {
+                        subagentWorkspace = path.join(
+                          workspaceDir,
+                          "subagents",
+                          task.id,
+                        );
+                        try {
+                          await mkdir(subagentWorkspace, { recursive: true });
+                        } catch (error) {
+                          const message = `Could not create dedicated workspace: ${error instanceof Error ? error.message : String(error)}`;
+                          sseController.enqueue(
+                            encodeSse({
+                              type: "subagent",
+                              id: task.id,
+                              task: task.task,
+                              model: task.model,
+                              status: "failed",
+                              error: message,
+                            }),
+                          );
+                          return {
+                            id: task.id,
+                            task: task.task,
+                            model: task.model,
+                            status: "failed",
+                            error: message,
+                          };
+                        }
+                      }
+
+                      let child: RunAgentResult;
+                      try {
+                        child = await runAgentCompletion({
+                          container,
+                          botId: resolved.botId,
+                          modelId: task.model,
+                          instruction: subagentInstruction(task),
+                          additionalSystemPrompt:
+                            "This is a child execution. The parent agent handles orchestration and user communication; do not invoke any delegation mechanism.",
+                          // Child writes are permitted only when it has an
+                          // dedicated per-child workspace. This preserves the
+                          // parent sandbox setting while avoiding ordinary
+                          // relative-path file races.
+                          allowFileWrites:
+                            allowFileWrites && Boolean(subagentWorkspace),
+                          workspaceDir: subagentWorkspace,
+                          maxRounds: MAX_SUBAGENT_TOOL_ROUNDS,
+                        });
+                      } catch (error) {
+                        const message = `Subagent execution failed: ${error instanceof Error ? error.message : String(error)}`;
+                        sseController.enqueue(
+                          encodeSse({
+                            type: "subagent",
+                            id: task.id,
+                            task: task.task,
+                            model: task.model,
+                            status: "failed",
+                            error: message,
+                          }),
+                        );
+                        return {
+                          id: task.id,
+                          task: task.task,
+                          model: task.model,
+                          status: "failed",
+                          error: message,
+                        };
+                      }
+                      if (!child.ok) {
+                        const error = child.error ?? "Subagent failed without an error message.";
+                        sseController.enqueue(
+                          encodeSse({
+                            type: "subagent",
+                            id: task.id,
+                            task: task.task,
+                            model: task.model,
+                            status: "failed",
+                            error,
+                          }),
+                        );
+                        return {
+                          id: task.id,
+                          task: task.task,
+                          model: task.model,
+                          status: "failed",
+                          error,
+                        };
+                      }
+
+                      const report = truncateSubagentResult(child.text);
+                      sseController.enqueue(
+                        encodeSse({
+                          type: "subagent",
+                          id: task.id,
+                          task: task.task,
+                          model: task.model,
+                          status: "completed",
+                          result: report,
+                        }),
+                      );
+                      return {
+                        id: task.id,
+                        task: task.task,
+                        model: task.model,
+                        status: "completed",
+                        result: report,
+                      };
+                    }),
+                  );
+                  subagentLog.push(...results);
+                  toolResult = JSON.stringify({ subagents: results });
+                }
+              } else {
+                const execution = await executeLocalTool(
+                  toolCall.function.name,
+                  args,
+                  localToolOptions,
+                );
+                toolResult = execution.content;
+              }
               runningMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: execution.content,
+                content: toolResult,
               });
             }
             // Loop back for the next model turn with tool results in-context.
@@ -747,6 +1090,7 @@ export function registerDesktopChatRoutes(
                 assistantReasoning:
                   trimmedReasoning.length > 0 ? trimmedReasoning : undefined,
                 toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
+                subagents: subagentLog.length > 0 ? subagentLog : undefined,
                 provider: resolved.providerKey,
                 model: resolved.modelId,
                 api: resolved.api,

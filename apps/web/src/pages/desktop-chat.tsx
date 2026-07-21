@@ -10,6 +10,7 @@ import {
   MessageSquarePlus,
   Send,
   Square,
+  UsersRound,
   Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,6 +31,15 @@ interface ToolCallEntry {
   summary: string;
 }
 
+interface SubagentEntry {
+  id: string;
+  task: string;
+  model: string;
+  status: "started" | "completed" | "failed";
+  result?: string;
+  error?: string;
+}
+
 interface StreamMessage {
   id: string;
   role: "user" | "assistant";
@@ -38,6 +48,8 @@ interface StreamMessage {
   reasoning?: string;
   /** Structured tool-call badges shown as a collapsible trace. */
   toolCalls?: ToolCallEntry[];
+  /** Delegated child-agent lifecycle and deliverable trace. */
+  subagents?: SubagentEntry[];
   pending?: boolean;
   error?: boolean;
 }
@@ -104,13 +116,18 @@ function extractText(msg: Record<string, unknown>): string {
 function extractTraces(
   msg: Record<string, unknown>,
   messageId: string,
-): { reasoning: string; toolCalls: ToolCallEntry[] } {
+): {
+  reasoning: string;
+  toolCalls: ToolCallEntry[];
+  subagents: SubagentEntry[];
+} {
   const content = msg.content;
   if (!Array.isArray(content)) {
-    return { reasoning: "", toolCalls: [] };
+    return { reasoning: "", toolCalls: [], subagents: [] };
   }
   let reasoning = "";
   const toolCalls: ToolCallEntry[] = [];
+  const subagents: SubagentEntry[] = [];
   for (const block of content as Array<Record<string, unknown>>) {
     if (!block || typeof block !== "object") continue;
     if (block.type === "reasoning" && typeof block.text === "string") {
@@ -126,9 +143,31 @@ function extractTraces(
         name,
         summary,
       });
+    } else if (block.type === "subagent") {
+      const status =
+        block.status === "completed" || block.status === "failed"
+          ? block.status
+          : "failed";
+      subagents.push({
+        id:
+          typeof block.id === "string" && block.id.length > 0
+            ? block.id
+            : `${messageId}-subagent-${subagents.length + 1}`,
+        task:
+          typeof block.task === "string" && block.task.length > 0
+            ? block.task
+            : "Subagent task",
+        model:
+          typeof block.model === "string" && block.model.length > 0
+            ? block.model
+            : "unknown model",
+        status,
+        ...(typeof block.result === "string" ? { result: block.result } : {}),
+        ...(typeof block.error === "string" ? { error: block.error } : {}),
+      });
     }
   }
-  return { reasoning: reasoning.trim(), toolCalls };
+  return { reasoning: reasoning.trim(), toolCalls, subagents };
 }
 
 function makeLocalMessageId(): string {
@@ -226,6 +265,68 @@ function ToolCallsBlock({
             className="font-mono text-[11px] leading-relaxed text-text-secondary break-words"
           >
             {call.summary}
+          </li>
+        ))}
+      </ul>
+    </CollapsibleTrace>
+  );
+}
+
+function SubagentsBlock({
+  subagents,
+  done,
+}: {
+  subagents: SubagentEntry[];
+  done: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <CollapsibleTrace
+      icon={<UsersRound size={13} />}
+      title={t("desktopChat.subagents", { count: subagents.length })}
+      done={done}
+      defaultOpen={!done}
+    >
+      <ul className="flex flex-col gap-2">
+        {subagents.map((subagent) => (
+          <li
+            key={subagent.id}
+            className="rounded-lg border border-border/70 bg-surface-1 px-2.5 py-2"
+          >
+            <div className="flex items-center gap-2 text-[11px] leading-relaxed text-text-secondary">
+              <span className="min-w-0 flex-1 break-words font-medium text-text-primary">
+                {subagent.task}
+              </span>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px]",
+                  subagent.status === "failed"
+                    ? "bg-destructive/10 text-destructive"
+                    : subagent.status === "completed"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-accent/10 text-accent",
+                )}
+              >
+                {subagent.status === "started"
+                  ? t("desktopChat.subagentStatus.started")
+                  : subagent.status === "completed"
+                    ? t("desktopChat.subagentStatus.completed")
+                    : t("desktopChat.subagentStatus.failed")}
+              </span>
+            </div>
+            <div className="mt-0.5 break-all font-mono text-[10px] text-text-muted">
+              {subagent.model}
+            </div>
+            {subagent.result && (
+              <div className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-text-secondary">
+                {subagent.result}
+              </div>
+            )}
+            {subagent.error && (
+              <div className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-destructive">
+                {subagent.error}
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -340,7 +441,7 @@ export function DesktopChatPage() {
           ?.messages ?? []) as Array<Record<string, unknown>>;
       return raw
         .map((message) => {
-          const { reasoning, toolCalls } = extractTraces(
+          const { reasoning, toolCalls, subagents } = extractTraces(
             message,
             String(message.id ?? ""),
           );
@@ -352,13 +453,15 @@ export function DesktopChatPage() {
             text: extractText(message),
             ...(reasoning ? { reasoning } : {}),
             ...(toolCalls.length > 0 ? { toolCalls } : {}),
+            ...(subagents.length > 0 ? { subagents } : {}),
           };
         })
         .filter(
           (message) =>
             message.text.trim().length > 0 ||
             Boolean(message.reasoning) ||
-            (message.toolCalls?.length ?? 0) > 0,
+            (message.toolCalls?.length ?? 0) > 0 ||
+            (message.subagents?.length ?? 0) > 0,
         );
     },
     enabled: Boolean(activeSession?.id),
@@ -455,6 +558,35 @@ export function DesktopChatPage() {
                         }
                       : message,
                   ),
+                );
+                break;
+              }
+              case "subagent": {
+                setStreamMessages((previous) =>
+                  previous.map((message) => {
+                    if (message.id !== assistantMessage.id) return message;
+                    const existing = message.subagents ?? [];
+                    const entry: SubagentEntry = {
+                      id: event.id,
+                      task: event.task,
+                      model: event.model,
+                      status: event.status,
+                      ...(event.result ? { result: event.result } : {}),
+                      ...(event.error ? { error: event.error } : {}),
+                    };
+                    const existingIndex = existing.findIndex(
+                      (subagent) => subagent.id === event.id,
+                    );
+                    const subagents =
+                      existingIndex === -1
+                        ? [...existing, entry]
+                        : existing.map((subagent, index) =>
+                            index === existingIndex
+                              ? { ...subagent, ...entry }
+                              : subagent,
+                          );
+                    return { ...message, subagents };
+                  }),
                 );
                 break;
               }
@@ -744,6 +876,14 @@ export function DesktopChatPage() {
                           />
                         )}
                       {isBot &&
+                        message.subagents &&
+                        message.subagents.length > 0 && (
+                          <SubagentsBlock
+                            subagents={message.subagents}
+                            done={!message.pending}
+                          />
+                        )}
+                      {isBot &&
                         message.toolCalls &&
                         message.toolCalls.length > 0 && (
                           <ToolCallsBlock
@@ -776,7 +916,9 @@ export function DesktopChatPage() {
                             <Loader2 className="animate-spin" size={14} />
                             {(message.reasoning && message.reasoning.length > 0) ||
                             (message.toolCalls &&
-                              message.toolCalls.length > 0) ? (
+                              message.toolCalls.length > 0) ||
+                            (message.subagents &&
+                              message.subagents.length > 0) ? (
                               <span className="text-[11px]">
                                 {t("desktopChat.working")}
                               </span>

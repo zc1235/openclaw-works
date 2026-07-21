@@ -59,6 +59,15 @@ export const desktopStreamEventSchema = z.discriminatedUnion("type", [
     summary: z.string().optional(),
   }),
   z.object({
+    type: z.literal("subagent"),
+    id: z.string(),
+    task: z.string(),
+    model: z.string(),
+    status: z.enum(["started", "completed", "failed"]),
+    result: z.string().optional(),
+    error: z.string().optional(),
+  }),
+  z.object({
     type: z.literal("done"),
     provider: z.string().nullable().optional(),
     model: z.string().nullable().optional(),

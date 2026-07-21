@@ -32,8 +32,8 @@ export type ChatMessage = {
 
 /**
  * Build the ordered content-block list for a persisted assistant transcript
- * message: optional reasoning (chain-of-thought), then a tool-call trace, then
- * the final answer text. The `reasoning` block uses an unknown block type that
+ * message: optional reasoning (chain-of-thought), then tool-call and
+ * subagent-deliverable traces, then the final answer text. The `reasoning` block uses an unknown block type that
  * transcript readers preserve but treat as invisible, while `toolCall` blocks
  * count as visible content (so a tool-only turn is still kept). Plain-text and
  * LLM-context extractors read only the `text` block, keeping the chat bubble
@@ -43,6 +43,14 @@ function buildAssistantTranscriptContent(input: {
   text: string;
   reasoning?: string;
   toolCalls?: Array<{ name: string; summary: string }>;
+  subagents?: Array<{
+    id: string;
+    task: string;
+    model: string;
+    status: "completed" | "failed";
+    result?: string;
+    error?: string;
+  }>;
 }): Array<Record<string, unknown>> {
   const blocks: Array<Record<string, unknown>> = [];
   if (input.reasoning && input.reasoning.trim().length > 0) {
@@ -54,6 +62,19 @@ function buildAssistantTranscriptContent(input: {
         type: "toolCall",
         name: call.name,
         summary: call.summary,
+      });
+    }
+  }
+  if (input.subagents && input.subagents.length > 0) {
+    for (const subagent of input.subagents) {
+      blocks.push({
+        type: "subagent",
+        id: subagent.id,
+        task: subagent.task,
+        model: subagent.model,
+        status: subagent.status,
+        ...(subagent.result ? { result: subagent.result } : {}),
+        ...(subagent.error ? { error: subagent.error } : {}),
       });
     }
   }
@@ -508,6 +529,15 @@ export class SessionsRuntime {
     assistantReasoning?: string;
     /** Optional tool-call trace to persist for desktop history replay. */
     toolCalls?: Array<{ name: string; summary: string }>;
+    /** Completed child-agent deliverables to replay in desktop history. */
+    subagents?: Array<{
+      id: string;
+      task: string;
+      model: string;
+      status: "completed" | "failed";
+      result?: string;
+      error?: string;
+    }>;
     provider?: string | null;
     model?: string | null;
     api?: string | null;
@@ -566,6 +596,7 @@ export class SessionsRuntime {
             text: input.assistantText,
             reasoning: input.assistantReasoning,
             toolCalls: input.toolCalls,
+            subagents: input.subagents,
           }),
           ...(input.api ? { api: input.api } : {}),
           ...(input.provider ? { provider: input.provider } : {}),

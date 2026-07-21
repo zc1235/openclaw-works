@@ -80,6 +80,14 @@ export class SessionService {
     assistantText: string;
     assistantReasoning?: string;
     toolCalls?: Array<{ name: string; summary: string }>;
+    subagents?: Array<{
+      id: string;
+      task: string;
+      model: string;
+      status: "completed" | "failed";
+      result?: string;
+      error?: string;
+    }>;
     provider?: string | null;
     model?: string | null;
     api?: string | null;
