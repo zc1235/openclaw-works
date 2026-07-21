@@ -20,7 +20,7 @@ import type { ControllerBindings } from "../types.js";
 const DESKTOP_CHANNEL_TYPE = "desktop";
 const DESKTOP_SESSION_PREFIX = "desktop-";
 const HISTORY_MESSAGE_LIMIT = 40;
-const MAX_TOOL_ROUNDTRIPS = 12;
+const MAX_TOOL_ROUNDTRIPS = 200;
 
 // Module-scoped encoder — TextEncoder is a value binding in @types/node
 // (no DOM lib is loaded in controller tsconfig), so it cannot be used as a
@@ -148,6 +148,56 @@ async function ensureWorkspaceDir(sessionKey: string): Promise<string | null> {
     );
     return null;
   }
+}
+
+/**
+ * Build a system message that tells the model where installed skills live and
+ * which ones are available, so it can actually find and use them instead of
+ * claiming it lacks the capability. Skills are folders (named by slug) with a
+ * SKILL.md documenting how to run them.
+ */
+function buildInstalledSkillsSystemPrompt(
+  container: ControllerContainer,
+): string | null {
+  let installedSlugs: string[] = [];
+  try {
+    const catalog = container.skillhubService.catalog.getCatalog();
+    installedSlugs = [
+      ...new Set(
+        (catalog.installedSkills ?? [])
+          .map((skill) => skill.slug)
+          .filter((slug): slug is string => Boolean(slug)),
+      ),
+    ];
+  } catch {
+    installedSlugs = [];
+  }
+
+  const skillsDir = container.env.openclawSkillsDir;
+  const userSkillsDir = container.env.userSkillsDir;
+  const dirs = [skillsDir, userSkillsDir].filter(
+    (dir): dir is string => typeof dir === "string" && dir.length > 0,
+  );
+  if (dirs.length === 0) {
+    return null;
+  }
+
+  const lines: string[] = [];
+  lines.push(
+    "Installed skills are capabilities the user enabled. Each is a folder (named by its slug) containing a SKILL.md that documents what it does and exactly how to run it (often scripts you execute with node or python). Skill folders live under:",
+  );
+  for (const dir of dirs) {
+    lines.push(`- ${dir}`);
+  }
+  if (installedSlugs.length > 0) {
+    lines.push(`Currently installed skills: ${installedSlugs.join(", ")}.`);
+  } else {
+    lines.push("No skills appear to be installed yet.");
+  }
+  lines.push(
+    "When the user asks to use a skill, DO NOT claim you lack that capability. First locate its folder (use list_directory on the skill directories above and match the requested name to a slug), then read that folder's SKILL.md with read_file and follow its instructions (run any scripts via run_command). Only say a skill is unavailable after checking these directories and finding no matching folder.",
+  );
+  return lines.join("\n");
 }
 
 function deriveTitleFromText(text: string): string {
@@ -293,8 +343,12 @@ async function streamOneRound(params: {
         model: params.resolved.modelId,
         messages: params.messages,
         stream: true,
-        tools: params.tools,
-        tool_choice: "auto",
+        // Only advertise tools when we have any. An empty tools array with
+        // tool_choice:"auto" is rejected by some providers, and we use a
+        // tools-less final round to force a plain-text summary.
+        ...(params.tools.length > 0
+          ? { tools: params.tools, tool_choice: "auto" }
+          : {}),
       }),
     },
   );
@@ -539,6 +593,10 @@ export function registerDesktopChatRoutes(
             "complete, end with a short plain-text summary of what you did.",
         });
       }
+      const skillsPrompt = buildInstalledSkillsSystemPrompt(container);
+      if (skillsPrompt) {
+        outgoing.push({ role: "system", content: skillsPrompt });
+      }
       outgoing.push(...historyMessages);
       outgoing.push({ role: "user", content: body.text });
 
@@ -568,6 +626,7 @@ export function registerDesktopChatRoutes(
           let assistantReasoning = "";
           const toolCallLog: Array<{ name: string; summary: string }> = [];
           let streamError: string | null = null;
+          let sawFinalAnswer = false;
 
           for (let round = 0; round < MAX_TOOL_ROUNDTRIPS; round += 1) {
             const result = await streamOneRound({
@@ -588,6 +647,7 @@ export function registerDesktopChatRoutes(
             }
 
             if (result.toolCalls.length === 0) {
+              sawFinalAnswer = true;
               break;
             }
 
@@ -632,6 +692,33 @@ export function registerDesktopChatRoutes(
               });
             }
             // Loop back for the next model turn with tool results in-context.
+          }
+
+          // If we exhausted the tool-call budget while the model still wanted
+          // to keep going, don't just end silently — run one final tools-less
+          // round so the model summarizes progress and tells the user it hit
+          // the limit and can continue.
+          if (!sawFinalAnswer && !streamError) {
+            runningMessages.push({
+              role: "system",
+              content:
+                `You have reached the maximum number of tool calls (${MAX_TOOL_ROUNDTRIPS}) allowed for a single turn. ` +
+                "Do NOT request any more tools. In plain text, briefly summarize what you accomplished, what is still " +
+                "unfinished, and ask the user whether you should continue.",
+            });
+            const summary = await streamOneRound({
+              resolved,
+              messages: runningMessages,
+              tools: [],
+              sseController,
+            });
+            assistantText += summary.text;
+            assistantReasoning += summary.reasoning;
+            if (summary.streamError || summary.text.trim().length === 0) {
+              const notice = `\n\n[Reached the ${MAX_TOOL_ROUNDTRIPS}-tool-call limit for this turn. Send another message to have me continue.]`;
+              sseController.enqueue(encodeSse({ type: "delta", text: notice }));
+              assistantText += notice;
+            }
           }
 
           const trimmedAssistant = assistantText.trim();
