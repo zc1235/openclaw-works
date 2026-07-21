@@ -209,6 +209,13 @@ export function DesktopChatPage() {
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // The session key the current optimistic buffer belongs to, so the URL-sync
+  // effect doesn't wipe it when we auto-navigate to the freshly created session.
+  const streamSessionKeyRef = useRef<string | null>(null);
+  // History length captured when a send starts; used to detect when the
+  // persisted transcript has caught up so we can drop the optimistic buffer
+  // without blanking the page.
+  const historyBaselineRef = useRef<number>(0);
 
   const botsQuery = useQuery({
     queryKey: ["desktop-chat-bots"],
@@ -246,18 +253,19 @@ export function DesktopChatPage() {
   );
 
   // Sync URL param -> local state. When ?id=new or unset we treat as new chat.
-  // Only wipe stream messages when the URL param itself changes so periodic
-  // sessions refetches don't blow away in-flight optimistic messages.
+  // Crucially, only discard the optimistic buffer when navigating to a session
+  // DIFFERENT from the one those messages belong to. When we auto-navigate to a
+  // freshly created session (its key already recorded during the "session"
+  // event), we keep the messages on screen so the conversation doesn't blank
+  // out before the persisted history loads.
   useEffect(() => {
-    if (!sessionParam || sessionParam === "new") {
-      setActiveSessionKey((previous) => (previous === null ? previous : null));
+    const target =
+      !sessionParam || sessionParam === "new" ? null : sessionParam;
+    setActiveSessionKey(target);
+    if (streamSessionKeyRef.current !== target) {
       setStreamMessages([]);
-      return;
+      streamSessionKeyRef.current = target;
     }
-    setActiveSessionKey((previous) =>
-      previous === sessionParam ? previous : sessionParam,
-    );
-    setStreamMessages([]);
   }, [sessionParam]);
 
   // When sessions list contains the current session, adopt its botId so the
@@ -331,6 +339,10 @@ export function DesktopChatPage() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      // Snapshot the persisted history length so the reconcile effect can tell
+      // when the transcript for this turn has been saved and re-fetched.
+      historyBaselineRef.current = historyMessages.length;
+
       const userMessage: StreamMessage = {
         id: makeLocalMessageId(),
         role: "user",
@@ -363,6 +375,9 @@ export function DesktopChatPage() {
             switch (event.type) {
               case "session": {
                 assignedSessionKey = event.sessionKey;
+                // Bind the optimistic buffer to this session so the URL-sync
+                // effect keeps it on screen when we navigate to the new URL.
+                streamSessionKeyRef.current = event.sessionKey;
                 if (!activeSessionKey) {
                   setActiveSessionKey(event.sessionKey);
                 }
@@ -487,22 +502,37 @@ export function DesktopChatPage() {
         ),
       );
     },
-    onSuccess: async (result) => {
-      // Once the sessions/history queries have refreshed with the persisted
-      // transcript, clear the optimistic buffer (unless we're in an error
-      // state we still want to show).
-      if (!result?.sawError) {
-        setTimeout(() => {
-          setStreamMessages((previous) =>
-            previous.filter((message) => message.pending || message.error),
-          );
-        }, 800);
-      }
+    onSuccess: (result) => {
+      // Make the freshly created session addressable and highlighted in the
+      // sidebar. The optimistic buffer is preserved by the URL-sync guard and
+      // cleared by the reconcile effect once the persisted history loads, so
+      // this navigation no longer blanks the conversation.
       if (result?.sessionKey && !sessionParam) {
         navigate(`/workspace/chat/${result.sessionKey}`, { replace: true });
       }
     },
   });
+
+  // Reconcile the optimistic buffer with the persisted transcript. Once a send
+  // has fully finished (all tool rounds) AND the history query has caught up
+  // (grown by the two messages this turn persists), drop the completed
+  // optimistic messages so history becomes the single source of truth — with
+  // no duplication and, critically, no blank flash. Never runs mid-send, and
+  // keeps pending/errored messages (which are not persisted) on screen.
+  useEffect(() => {
+    if (sendMutation.isPending) return;
+    if (historyQuery.isFetching) return;
+    setStreamMessages((previous) => {
+      if (previous.length === 0) return previous;
+      if (previous.some((message) => message.pending || message.error)) {
+        return previous;
+      }
+      if (historyMessages.length < historyBaselineRef.current + 2) {
+        return previous;
+      }
+      return [];
+    });
+  }, [sendMutation.isPending, historyQuery.isFetching, historyMessages]);
 
   const handleSubmit = useCallback(() => {
     const value = draft.trim();

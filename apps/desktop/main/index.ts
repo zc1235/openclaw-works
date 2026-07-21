@@ -358,16 +358,16 @@ function getWindowsTrayStrings(): {
 } {
   if (isZhLocale()) {
     return {
-      show: "显示 Nexu",
-      hide: "隐藏 Nexu",
-      quit: "退出 Nexu",
+      show: "显示灵光",
+      hide: "隐藏灵光",
+      quit: "退出灵光",
     };
   }
 
   return {
-    show: "Show Nexu",
-    hide: "Hide Nexu",
-    quit: "Quit Nexu",
+    show: "Show 灵光",
+    hide: "Hide 灵光",
+    quit: "Quit 灵光",
   };
 }
 
