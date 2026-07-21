@@ -78,6 +78,8 @@ export class SessionService {
     metadata?: Record<string, unknown>;
     userText: string;
     assistantText: string;
+    assistantReasoning?: string;
+    toolCalls?: Array<{ name: string; summary: string }>;
     provider?: string | null;
     model?: string | null;
     api?: string | null;

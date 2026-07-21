@@ -30,6 +30,39 @@ export type ChatMessage = {
   createdAt: string | null;
 };
 
+/**
+ * Build the ordered content-block list for a persisted assistant transcript
+ * message: optional reasoning (chain-of-thought), then a tool-call trace, then
+ * the final answer text. The `reasoning` block uses an unknown block type that
+ * transcript readers preserve but treat as invisible, while `toolCall` blocks
+ * count as visible content (so a tool-only turn is still kept). Plain-text and
+ * LLM-context extractors read only the `text` block, keeping the chat bubble
+ * and model context clean.
+ */
+function buildAssistantTranscriptContent(input: {
+  text: string;
+  reasoning?: string;
+  toolCalls?: Array<{ name: string; summary: string }>;
+}): Array<Record<string, unknown>> {
+  const blocks: Array<Record<string, unknown>> = [];
+  if (input.reasoning && input.reasoning.trim().length > 0) {
+    blocks.push({ type: "reasoning", text: input.reasoning });
+  }
+  if (input.toolCalls && input.toolCalls.length > 0) {
+    for (const call of input.toolCalls) {
+      blocks.push({
+        type: "toolCall",
+        name: call.name,
+        summary: call.summary,
+      });
+    }
+  }
+  // Always include a text block last (even if empty) so the assistant answer
+  // renders and older readers that expect a text block keep working.
+  blocks.push({ type: "text", text: input.text });
+  return blocks;
+}
+
 type SessionMetadata = {
   title?: string;
   channelType?: string | null;
@@ -471,6 +504,10 @@ export class SessionsRuntime {
     metadata?: Record<string, unknown>;
     userText: string;
     assistantText: string;
+    /** Optional chain-of-thought to persist for desktop history replay. */
+    assistantReasoning?: string;
+    /** Optional tool-call trace to persist for desktop history replay. */
+    toolCalls?: Array<{ name: string; summary: string }>;
     provider?: string | null;
     model?: string | null;
     api?: string | null;
@@ -519,7 +556,17 @@ export class SessionsRuntime {
         timestamp: nowIso,
         message: {
           role: "assistant",
-          content: [{ type: "text", text: input.assistantText }],
+          // Content is an ordered block list: reasoning (chain-of-thought)
+          // first, then a tool-call trace, then the final answer text. Only the
+          // `text` block is treated as the visible answer by readers; the
+          // `reasoning`/`toolCall` blocks are picked up by the desktop chat UI
+          // to replay the thinking process and tool calls in history, and are
+          // ignored by the LLM-context and plain-text extractors.
+          content: buildAssistantTranscriptContent({
+            text: input.assistantText,
+            reasoning: input.assistantReasoning,
+            toolCalls: input.toolCalls,
+          }),
           ...(input.api ? { api: input.api } : {}),
           ...(input.provider ? { provider: input.provider } : {}),
           ...(input.model ? { model: input.model } : {}),

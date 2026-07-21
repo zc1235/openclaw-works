@@ -20,7 +20,7 @@ import type { ControllerBindings } from "../types.js";
 const DESKTOP_CHANNEL_TYPE = "desktop";
 const DESKTOP_SESSION_PREFIX = "desktop-";
 const HISTORY_MESSAGE_LIMIT = 40;
-const MAX_TOOL_ROUNDTRIPS = 6;
+const MAX_TOOL_ROUNDTRIPS = 12;
 
 // Module-scoped encoder — TextEncoder is a value binding in @types/node
 // (no DOM lib is loaded in controller tsconfig), so it cannot be used as a
@@ -529,7 +529,11 @@ export function registerDesktopChatRoutes(
           content:
             `This conversation has a dedicated workspace directory at: ${workspaceDir}\n` +
             "When you create files for the user, write them here (run_command runs in this directory by default). " +
-            "Use get_workspace_directory if you need the absolute path.",
+            "Use get_workspace_directory if you need the absolute path.\n" +
+            "Shell commands are NON-INTERACTIVE and cannot answer prompts: always use non-interactive flags " +
+            "(e.g. `npm create vue@latest my-app -- --default`, `npm install`, `--yes`/`-y`). Prefer the write_file " +
+            "tool over shell heredocs/echo for creating file contents. Work in small steps, and when the task is " +
+            "complete, end with a short plain-text summary of what you did.",
         });
       }
       outgoing.push(...historyMessages);
@@ -558,6 +562,8 @@ export function registerDesktopChatRoutes(
 
           const runningMessages: OpenAiChatMessage[] = [...outgoing];
           let assistantText = "";
+          let assistantReasoning = "";
+          const toolCallLog: Array<{ name: string; summary: string }> = [];
           let streamError: string | null = null;
 
           for (let round = 0; round < MAX_TOOL_ROUNDTRIPS; round += 1) {
@@ -568,6 +574,7 @@ export function registerDesktopChatRoutes(
               sseController,
             });
             assistantText += result.text;
+            assistantReasoning += result.reasoning;
 
             if (result.streamError) {
               streamError = result.streamError;
@@ -593,6 +600,7 @@ export function registerDesktopChatRoutes(
             for (const toolCall of result.toolCalls) {
               const args = parseToolArgs(toolCall.function.arguments);
               const summary = summariseToolCall(toolCall.function.name, args);
+              toolCallLog.push({ name: toolCall.function.name, summary });
               sseController.enqueue(
                 encodeSse({
                   type: "toolCall",
@@ -624,7 +632,15 @@ export function registerDesktopChatRoutes(
           }
 
           const trimmedAssistant = assistantText.trim();
-          if (!streamError && trimmedAssistant.length > 0) {
+          const trimmedReasoning = assistantReasoning.trim();
+          // Persist whenever the turn produced *any* assistant output — final
+          // text OR tool activity. Agentic turns that are mostly tool calls
+          // (e.g. "create a folder and scaffold a project") previously vanished
+          // from history because they had little/no final text.
+          if (
+            !streamError &&
+            (trimmedAssistant.length > 0 || toolCallLog.length > 0)
+          ) {
             try {
               await container.sessionService.appendCompatTranscript({
                 botId: resolved.botId,
@@ -638,6 +654,9 @@ export function registerDesktopChatRoutes(
                 },
                 userText: body.text,
                 assistantText: trimmedAssistant,
+                assistantReasoning:
+                  trimmedReasoning.length > 0 ? trimmedReasoning : undefined,
+                toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
                 provider: resolved.providerKey,
                 model: resolved.modelId,
                 api: resolved.api,

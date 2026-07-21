@@ -96,6 +96,41 @@ function extractText(msg: Record<string, unknown>): string {
   return "";
 }
 
+/**
+ * Pull the persisted reasoning (chain-of-thought) and tool-call trace out of a
+ * history message's content blocks so a reopened conversation can replay the
+ * thinking process and tool calls (mirrors what streams live).
+ */
+function extractTraces(
+  msg: Record<string, unknown>,
+  messageId: string,
+): { reasoning: string; toolCalls: ToolCallEntry[] } {
+  const content = msg.content;
+  if (!Array.isArray(content)) {
+    return { reasoning: "", toolCalls: [] };
+  }
+  let reasoning = "";
+  const toolCalls: ToolCallEntry[] = [];
+  for (const block of content as Array<Record<string, unknown>>) {
+    if (!block || typeof block !== "object") continue;
+    if (block.type === "reasoning" && typeof block.text === "string") {
+      reasoning += block.text;
+    } else if (block.type === "toolCall") {
+      const name = typeof block.name === "string" ? block.name : "tool";
+      const summary =
+        typeof block.summary === "string" && block.summary.length > 0
+          ? block.summary
+          : name;
+      toolCalls.push({
+        id: `${messageId}-tool-${toolCalls.length + 1}`,
+        name,
+        summary,
+      });
+    }
+  }
+  return { reasoning: reasoning.trim(), toolCalls };
+}
+
 function makeLocalMessageId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -160,6 +195,7 @@ function ThinkingBlock({
       icon={<Brain size={13} />}
       title={done ? t("desktopChat.thoughtDone") : t("desktopChat.thinking")}
       done={done}
+      defaultOpen={!done}
     >
       <div className="whitespace-pre-wrap text-[12px] leading-relaxed text-text-muted">
         {reasoning}
@@ -181,6 +217,7 @@ function ToolCallsBlock({
       icon={<Wrench size={13} />}
       title={t("desktopChat.toolCalls", { count: toolCalls.length })}
       done={done}
+      defaultOpen={!done}
     >
       <ul className="flex flex-col gap-1">
         {toolCalls.map((call) => (
@@ -302,14 +339,27 @@ export function DesktopChatPage() {
         ((data as { messages?: Array<Record<string, unknown>> } | undefined)
           ?.messages ?? []) as Array<Record<string, unknown>>;
       return raw
-        .map((message) => ({
-          id: String(message.id ?? makeLocalMessageId()),
-          role: (message.role === "assistant" ? "assistant" : "user") as
-            | "assistant"
-            | "user",
-          text: extractText(message),
-        }))
-        .filter((message) => message.text.trim().length > 0);
+        .map((message) => {
+          const { reasoning, toolCalls } = extractTraces(
+            message,
+            String(message.id ?? ""),
+          );
+          return {
+            id: String(message.id ?? makeLocalMessageId()),
+            role: (message.role === "assistant" ? "assistant" : "user") as
+              | "assistant"
+              | "user",
+            text: extractText(message),
+            ...(reasoning ? { reasoning } : {}),
+            ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          };
+        })
+        .filter(
+          (message) =>
+            message.text.trim().length > 0 ||
+            Boolean(message.reasoning) ||
+            (message.toolCalls?.length ?? 0) > 0,
+        );
     },
     enabled: Boolean(activeSession?.id),
   });
@@ -626,16 +676,30 @@ export function DesktopChatPage() {
               </div>
             </div>
           ) : combinedMessages.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-center">
-              <div>
-                <div className="mb-2 text-lg font-medium text-text-primary">
-                  {t("desktopChat.emptyTitle")}
-                </div>
-                <div className="text-[13px] text-text-muted max-w-md">
-                  {t("desktopChat.emptyDesc")}
+            sendMutation.isPending ||
+            historyQuery.isFetching ||
+            (Boolean(sessionParam) &&
+              sessionParam !== "new" &&
+              !activeSession &&
+              sessionsQuery.isFetching) ? (
+              // We're mid-send or loading a specific conversation's history —
+              // show a loader rather than the "new chat" welcome so the page
+              // never appears to reset to the default screen.
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="animate-spin text-text-muted" size={22} />
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-center">
+                <div>
+                  <div className="mb-2 text-lg font-medium text-text-primary">
+                    {t("desktopChat.emptyTitle")}
+                  </div>
+                  <div className="text-[13px] text-text-muted max-w-md">
+                    {t("desktopChat.emptyDesc")}
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           ) : (
             <div className="mx-auto flex w-full max-w-[920px] flex-col gap-5">
               {combinedMessages.map((message) => {

@@ -28,7 +28,7 @@ const execFileAsync = promisify(execFile);
 
 const MAX_FILE_BYTES = 200 * 1024;
 const MAX_DIR_ENTRIES = 200;
-const MAX_COMMAND_TIMEOUT_MS = 30_000;
+const MAX_COMMAND_TIMEOUT_MS = 120_000;
 const MAX_COMMAND_OUTPUT_BYTES = 32 * 1024;
 
 /** JSON-schema tool definition sent to the OpenAI-compatible provider. */
@@ -236,7 +236,7 @@ export const LOCAL_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: "run_command",
       description:
-        "Run a shell command and return its text output. On Windows the command runs via cmd /c, otherwise via /bin/sh -c, in the current conversation's workspace directory. Can be used to create, move, or modify files as well as inspect the system. Output is truncated to 32 KB and the command times out after 30 seconds.",
+        "Run a shell command and return its text output. On Windows the command runs via cmd /c, otherwise via /bin/sh -c, in the current conversation's workspace directory. Can be used to create, move, or modify files as well as inspect the system. IMPORTANT: commands must be NON-INTERACTIVE — they cannot answer prompts. Always pass flags that avoid prompts (e.g. npm/yarn/pnpm '--yes', scaffolders like 'npm create vue@latest my-app -- --default', 'git ... --no-edit'). Output is truncated to 32 KB and the command times out after 120 seconds, so prefer small, focused steps.",
       parameters: {
         type: "object",
         properties: {
