@@ -64,7 +64,10 @@ export type CatalogMeta = {
 export type NexuDesktopBridge = {
   skillhub: {
     getCatalog: () => Promise<SkillhubCatalogData>;
-    install: (slug: string) => Promise<{ ok: boolean; error?: string }>;
+    install: (
+      slug: string,
+      opts?: { author?: string },
+    ) => Promise<{ ok: boolean; error?: string }>;
     uninstall: (slug: string) => Promise<{ ok: boolean; error?: string }>;
     refreshCatalog: () => Promise<{ ok: boolean; skillCount: number }>;
   };

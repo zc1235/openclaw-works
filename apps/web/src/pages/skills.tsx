@@ -136,7 +136,10 @@ function SkillCard({
     setPendingAction("install");
     const skillType = getSkillType(skill.tags);
     try {
-      await installMutation.mutateAsync(skill.slug);
+      await installMutation.mutateAsync({
+        slug: skill.slug,
+        author: skill.author,
+      });
       track("workspace_skill_install", {
         skill_name: skill.name,
         skill_type: skillType,
@@ -219,9 +222,11 @@ function SkillCard({
           <div className="text-[13px] font-semibold text-text-heading truncate">
             {skill.name}
           </div>
-          {categoryLabel && (
-            <span className="text-[11px] text-text-muted">{categoryLabel}</span>
-          )}
+          <div className="text-[11px] text-text-muted truncate font-mono">
+            {skill.author
+              ? `${skill.author}/${skill.slug}`
+              : categoryLabel ?? skill.slug}
+          </div>
         </div>
       </div>
 
@@ -607,7 +612,10 @@ export function SkillsPage() {
     if (debouncedQuery.trim()) {
       const q = debouncedQuery.toLowerCase();
       list = list.filter((s) =>
-        [s.slug, s.name, s.description].join("\n").toLowerCase().includes(q),
+        [s.slug, s.name, s.description, s.author ?? ""]
+          .join("\n")
+          .toLowerCase()
+          .includes(q),
       );
     }
 

@@ -3543,6 +3543,7 @@ export type GetApiV1SkillhubCatalogResponses = {
             slug: string;
             name: string;
             description: string;
+            author?: string;
             downloads: number;
             stars: number;
             tags: Array<string>;
@@ -3584,6 +3585,7 @@ export type PostApiV1SkillhubInstallData = {
         slug: string;
         source?: 'managed' | 'custom' | 'workspace' | 'user';
         agentId?: string;
+        author?: string;
     };
     path?: never;
     query?: never;
@@ -3701,6 +3703,7 @@ export type GetApiV1SkillhubSkillsBySlugResponses = {
         slug: string;
         name: string;
         description: string;
+        author?: string;
         downloads: number;
         stars: number;
         tags: Array<string>;

@@ -77,6 +77,7 @@ const skillhubUninstallRequestSchema = z
     slug: skillhubSlugSchema,
     source: skillhubSourceSchema.optional(),
     agentId: z.string().nullable().optional(),
+    author: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.source === "workspace" && !value.agentId) {
@@ -197,8 +198,11 @@ export function registerSkillhubRoutes(
       },
     }),
     async (c) => {
-      const { slug } = c.req.valid("json");
-      const queueItem = container.skillhubService.enqueueInstall(slug);
+      const { slug, author } = c.req.valid("json");
+      const queueItem = container.skillhubService.enqueueInstall(
+        slug,
+        author,
+      );
       return c.json(
         {
           ok: true,

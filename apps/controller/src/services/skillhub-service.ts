@@ -72,8 +72,8 @@ export class SkillhubService {
     });
 
     const installQueue = new InstallQueue({
-      executor: async (slug) => {
-        await catalogManager.executeInstall(slug);
+      executor: async (slug, author) => {
+        await catalogManager.executeInstall(slug, author);
         alignSkillName(env.openclawSkillsDir, slug);
         stripRequiresBins(env.openclawSkillsDir, slug);
       },
@@ -212,9 +212,9 @@ export class SkillhubService {
     return this.installQueue;
   }
 
-  enqueueInstall(slug: string): QueueItem {
+  enqueueInstall(slug: string, author?: string): QueueItem {
     const canonical = this.catalogManager.canonicalizeSlug(slug);
-    return this.installQueue.enqueue(canonical, "managed");
+    return this.installQueue.enqueue(canonical, "managed", { author });
   }
 
   cancelInstall(slug: string): boolean {

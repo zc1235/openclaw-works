@@ -520,6 +520,7 @@ export class CatalogManager {
 
   async installSkill(
     rawSlug: string,
+    author?: string,
   ): Promise<{ ok: boolean; error?: string }> {
     const slug = SLUG_CORRECTIONS[rawSlug] ?? rawSlug;
     if (!isValidSlug(slug)) {
@@ -529,7 +530,11 @@ export class CatalogManager {
 
     this.log("info", `installing skill slug=${slug} dir=${this.skillsDir}`);
     try {
-      await this.runClawhubInstall(slug, this.resolveAuthorForSlug(slug));
+      const resolvedAuthor =
+        author && author.trim().length > 0
+          ? author.trim()
+          : this.resolveAuthorForSlug(slug);
+      await this.runClawhubInstall(slug, resolvedAuthor);
       this.log("info", `install ok slug=${slug}`);
       await this.installSkillDeps(resolve(this.skillsDir, slug), slug);
       this.db.recordInstall(slug, "managed");
@@ -544,15 +549,27 @@ export class CatalogManager {
   /**
    * Execute a single clawhub install + npm deps. Does NOT record in DB.
    * Used by InstallQueue as the executor function.
+   *
+   * When `author` is provided, it is used directly to build the owner-qualified
+   * install target, skipping the catalog-based `resolveAuthorForSlug` lookup.
+   * This ensures the user gets the exact skill they clicked on instead of the
+   * most-downloaded one when several authors publish the same slug.
    */
-  async executeInstall(rawSlug: string): Promise<void> {
+  async executeInstall(
+    rawSlug: string,
+    author?: string,
+  ): Promise<void> {
     const slug = SLUG_CORRECTIONS[rawSlug] ?? rawSlug;
     if (!isValidSlug(slug)) {
       throw new Error(`Invalid skill slug: ${slug}`);
     }
 
     this.log("info", `installing: ${slug} -> ${this.skillsDir}`);
-    await this.runClawhubInstall(slug, this.resolveAuthorForSlug(slug));
+    const resolvedAuthor =
+      author && author.trim().length > 0
+        ? author.trim()
+        : this.resolveAuthorForSlug(slug);
+    await this.runClawhubInstall(slug, resolvedAuthor);
     await this.installSkillDeps(resolve(this.skillsDir, slug), slug);
   }
 

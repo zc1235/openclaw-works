@@ -55,7 +55,10 @@ export function CommunitySkillCard({
       // Turning ON = Install
       setPendingAction("install");
       try {
-        await installMutation.mutateAsync(skill.slug);
+        await installMutation.mutateAsync({
+          slug: skill.slug,
+          author: skill.author,
+        });
       } finally {
         setPendingAction(null);
       }

@@ -5,7 +5,10 @@ import type {
   SkillSource,
 } from "./types.js";
 
-export type InstallExecutor = (slug: string) => Promise<void>;
+export type InstallExecutor = (
+  slug: string,
+  author?: string,
+) => Promise<void>;
 export type InstallCompleteCallback = (
   slug: string,
   source: SkillSource,
@@ -61,6 +64,8 @@ type MutableQueueItem = {
   enqueuedAt: string;
   /** Best-effort startup auto-install: drop silently on permanent failure. */
   silent: boolean;
+  /** Optional author/owner handle to disambiguate same-slug skills. */
+  author?: string;
 };
 
 export class InstallQueue {
@@ -110,7 +115,7 @@ export class InstallQueue {
   enqueue(
     slug: string,
     source: SkillSource,
-    opts?: { silent?: boolean },
+    opts?: { silent?: boolean; author?: string },
   ): QueueItem {
     // Dedup: check active, pending, and completed
     const existing = this.findItem(slug);
@@ -137,6 +142,7 @@ export class InstallQueue {
       retries: 0,
       enqueuedAt: new Date().toISOString(),
       silent: opts?.silent ?? false,
+      author: opts?.author,
     };
 
     this.pending.push(item);
@@ -274,7 +280,7 @@ export class InstallQueue {
   private execute(item: MutableQueueItem): void {
     this.log("info", `Executing install for: ${item.slug}`);
 
-    this.executor(item.slug).then(
+    this.executor(item.slug, item.author).then(
       async () => {
         if (this.disposed) return;
 

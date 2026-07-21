@@ -64,9 +64,14 @@ export function useInstallSkill() {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: async (slug: string) => {
+    mutationFn: async (input: string | { slug: string; author?: string }) => {
+      const slug = typeof input === "string" ? input : input.slug;
+      const author = typeof input === "string" ? undefined : input.author;
       const { data, error } = await postApiV1SkillhubInstall({
-        body: { slug },
+        body: {
+          slug,
+          ...(author ? { author } : {}),
+        },
       });
       if (error) throw new Error("Install request failed");
       const result = data as {

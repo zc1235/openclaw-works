@@ -27,6 +27,7 @@ type SkillDetail = {
   slug: string;
   name: string;
   description: string;
+  author?: string;
   downloads: number;
   stars: number;
   tags: string[];
@@ -364,7 +365,10 @@ export function CommunitySkillDetailPage() {
     if (!slug) return;
     setPendingAction("install");
     try {
-      await installMutation.mutateAsync(slug);
+      await installMutation.mutateAsync({
+        slug,
+        author: data?.author,
+      });
     } finally {
       setPendingAction(null);
     }
@@ -434,6 +438,7 @@ export function CommunitySkillDetailPage() {
               {data.name}
             </h1>
             <p className="text-[13px] text-text-muted font-mono mb-2">
+              {data.author ? `${data.author}/` : ""}
               {data.slug}
               {data.version && (
                 <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-surface-3">
