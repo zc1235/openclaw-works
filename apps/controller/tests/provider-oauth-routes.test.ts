@@ -120,6 +120,7 @@ function createTestContainer(rootDir: string): ControllerContainer {
     analyticsService: {} as ControllerContainer["analyticsService"],
     artifactService: {} as ControllerContainer["artifactService"],
     templateService: {} as ControllerContainer["templateService"],
+    schedulerService: {} as ControllerContainer["schedulerService"],
     skillhubService: {
       catalog: {
         getCatalog: vi.fn(() => ({

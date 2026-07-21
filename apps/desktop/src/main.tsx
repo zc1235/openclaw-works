@@ -1197,6 +1197,12 @@ function DesktopShell() {
 
     void ensureDesktopControllerReady({
       readyUrl,
+      // A fresh install cold-starts slowly (runtime extraction + curated skill
+      // install), so give the first probe a generous budget before surfacing a
+      // recovery affordance. Background self-heal (below) covers anything that
+      // still exceeds this.
+      attemptTimeoutMs: 30_000,
+      finalAttemptTimeoutMs: 120_000,
       startController: async () => {
         await startUnit("controller");
       },
@@ -1216,14 +1222,67 @@ function DesktopShell() {
         return;
       }
 
+      // Readiness timed out. Stay on the web surface (which renders the
+      // recovery card) instead of navigating to the control plane — in the
+      // packaged/immersive window the control plane has no way back, which is
+      // why a slow first launch appeared "stuck" on the runtime console until
+      // the app was restarted.
       setControllerSurfaceState("failed");
-      setActiveSurface((surface) => (surface === "web" ? "control" : surface));
     });
 
     return () => {
       cancelled = true;
     };
   }, [runtimeConfig, controllerReady, controllerRetryNonce]);
+
+  // Background self-heal: a slow first-launch cold start can exceed the initial
+  // readiness budget above and land in the "failed" state. Keep probing so the
+  // workspace mounts automatically the moment the controller reports ready —
+  // no app restart required.
+  useEffect(() => {
+    if (!runtimeConfig) return;
+    if (controllerReady) return;
+    if (controllerSurfaceState !== "failed") return;
+
+    let cancelled = false;
+    const readyUrl = new URL(
+      "/api/internal/desktop/ready",
+      runtimeConfig.urls.web,
+    ).toString();
+
+    const timer = window.setInterval(() => {
+      void fetch(readyUrl, {
+        signal:
+          typeof AbortSignal !== "undefined" &&
+          typeof AbortSignal.timeout === "function"
+            ? AbortSignal.timeout(3000)
+            : undefined,
+      })
+        .then(async (response) => {
+          if (!response.ok) return false;
+          const payload = (await response.json().catch(() => null)) as
+            | { ready?: boolean; coreReady?: boolean }
+            | null;
+          return Boolean(
+            payload && (payload.coreReady === true || payload.ready === true),
+          );
+        })
+        .then((ready) => {
+          if (cancelled || !ready) return;
+          setControllerReady(true);
+          setControllerSurfaceState("polling");
+          setActiveSurface((surface) =>
+            surface === "control" ? "web" : surface,
+          );
+        })
+        .catch(() => {});
+    }, 5_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [runtimeConfig, controllerReady, controllerSurfaceState]);
 
   const desktopWebUrl =
     runtimeConfig && controllerReady

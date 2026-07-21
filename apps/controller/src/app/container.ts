@@ -1,3 +1,4 @@
+import { runAgentCompletion } from "../lib/agent-runner.js";
 import { logger } from "../lib/logger.js";
 import { ControlPlaneHealthService } from "../runtime/control-plane-health.js";
 import { CreditGuardStateWriter } from "../runtime/credit-guard-state-writer.js";
@@ -35,6 +36,7 @@ import { OpenClawSyncService } from "../services/openclaw-sync-service.js";
 import { QuotaFallbackService } from "../services/quota-fallback-service.js";
 import { RuntimeConfigService } from "../services/runtime-config-service.js";
 import { RuntimeModelStateService } from "../services/runtime-model-state-service.js";
+import { SchedulerService } from "../services/scheduler-service.js";
 import { SessionService } from "../services/session-service.js";
 import { SkillhubService } from "../services/skillhub-service.js";
 import { TemplateService } from "../services/template-service.js";
@@ -69,6 +71,7 @@ export interface ControllerContainer {
   githubStarVerificationService: GithubStarVerificationService;
   wsClient: OpenClawWsClient;
   gatewayService: OpenClawGatewayService;
+  schedulerService: SchedulerService;
   runtimeState: ControllerRuntimeState;
   startBackgroundLoops: () => () => void;
 }
@@ -179,7 +182,28 @@ export async function createContainer(): Promise<ControllerContainer> {
     await openclawProcess.restart("cloud_state_changed");
   };
 
-  return {
+  // The scheduler needs the fully-assembled container to run agent tasks, so
+  // it resolves it lazily through a ref set just before this function returns.
+  let containerRef: ControllerContainer | null = null;
+  const schedulerService = new SchedulerService({
+    configStore,
+    gatewayService,
+    runInstruction: async (task) => {
+      const activeContainer = containerRef;
+      if (!activeContainer) {
+        return { ok: false, text: "", error: "controller not ready" };
+      }
+      const allowFileWrites = !(await configStore.getDesktopAgentSandbox());
+      return runAgentCompletion({
+        container: activeContainer,
+        botId: task.botId,
+        instruction: task.instruction,
+        allowFileWrites,
+      });
+    },
+  });
+
+  const container: ControllerContainer = {
     env,
     gatewayClient,
     controlPlaneHealth,
@@ -220,6 +244,7 @@ export async function createContainer(): Promise<ControllerContainer> {
     githubStarVerificationService,
     wsClient,
     gatewayService,
+    schedulerService,
     configStore,
     runtimeState,
     startBackgroundLoops: () => {
@@ -257,6 +282,7 @@ export async function createContainer(): Promise<ControllerContainer> {
       }, NEXU_OFFICIAL_MODEL_REFRESH_INTERVAL_MS);
       nexuOfficialModelRefreshInterval.unref?.();
       skillhubService.start();
+      schedulerService.start();
 
       return () => {
         stopHealthLoop();
@@ -265,8 +291,12 @@ export async function createContainer(): Promise<ControllerContainer> {
         skillhubService.dispose();
         openclawAuthService.dispose();
         channelFallbackService.stop();
+        schedulerService.stop();
         wsClient.stop();
       };
     },
   };
+
+  containerRef = container;
+  return container;
 }

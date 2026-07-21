@@ -29,6 +29,7 @@ import {
   Cable,
   ChevronRight,
   ChevronUp,
+  Clock,
   FolderOpen,
   Info,
   Menu,
@@ -715,6 +716,9 @@ function WorkspaceLayoutInner() {
     location.pathname.includes("/settings");
   const isChatPage = location.pathname.startsWith("/workspace/chat");
   const isChannelsPage = location.pathname.startsWith("/workspace/channels");
+  const isScheduledTasksPage = location.pathname.startsWith(
+    "/workspace/scheduled-tasks",
+  );
   const isIntegrationsPage = location.pathname.startsWith(
     "/workspace/integrations",
   );
@@ -994,6 +998,19 @@ function WorkspaceLayoutInner() {
             >
               <Cable size={16} className="shrink-0" />
               {t("layout.nav.channels")}
+            </Link>
+            <Link
+              to="/workspace/scheduled-tasks"
+              onClick={() => {
+                track("workspace_sidebar_click", { target: "scheduled-tasks" });
+              }}
+              className={cn(
+                "nav-item flex items-center gap-2.5 w-full rounded-[var(--radius-6)] text-[13px] transition-colors cursor-pointer mt-0.5 px-3 py-2 whitespace-nowrap",
+                isScheduledTasksPage && "nav-item-active",
+              )}
+            >
+              <Clock size={16} className="shrink-0" />
+              {t("layout.nav.scheduledTasks")}
             </Link>
             <Link
               to="/workspace/integrations"

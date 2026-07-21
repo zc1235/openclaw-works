@@ -14,6 +14,7 @@ import {
   parseCustomProviderKey,
   persistedModelsConfigSchema,
   providerResponseSchema,
+  scheduledTaskResponseSchema,
 } from "@nexu/shared";
 import { z } from "zod";
 
@@ -554,6 +555,7 @@ const nexuConfigObjectSchema = z.object({
   integrations: z.array(integrationResponseSchema).default([]),
   mcpServers: z.array(mcpServerResponseSchema).default([]),
   channels: z.array(channelResponseSchema).default([]),
+  scheduledTasks: z.array(scheduledTaskResponseSchema).default([]),
   templates: z.record(z.string(), controllerTemplateSchema).default({}),
   desktop: z
     .object({
@@ -634,6 +636,9 @@ export const nexuConfigSchema = z.preprocess((input) => {
       ? candidate.integrations
       : [],
     channels: Array.isArray(candidate.channels) ? candidate.channels : [],
+    scheduledTasks: Array.isArray(candidate.scheduledTasks)
+      ? candidate.scheduledTasks
+      : [],
     templates:
       typeof candidate.templates === "object" && candidate.templates !== null
         ? candidate.templates

@@ -11,6 +11,7 @@ import { FeishuBindPage } from "./pages/feishu-bind";
 import { IntegrationsPage } from "./pages/integrations";
 import { ModelsPage } from "./pages/models";
 import { OAuthCallbackPage } from "./pages/oauth-callback";
+import { ScheduledTasksPage } from "./pages/scheduled-tasks";
 import { SessionsPage } from "./pages/sessions";
 import { SkillsPage } from "./pages/skills";
 import { SlackOAuthCallbackPage } from "./pages/slack-oauth-callback";
@@ -25,6 +26,7 @@ function DocumentTitleSync() {
       "/workspace/home": t("title.desktopChat"),
       "/workspace/chat": t("title.desktopChat"),
       "/workspace/channels": t("title.channels"),
+      "/workspace/scheduled-tasks": t("title.scheduledTasks"),
       "/workspace/integrations": t("title.integrations"),
       "/workspace/skills": t("title.skills"),
       "/workspace/settings": t("title.settings"),
@@ -87,6 +89,10 @@ export function App() {
                 element={<SessionsPage />}
               />
               <Route path="/workspace/channels" element={<ChannelsPage />} />
+              <Route
+                path="/workspace/scheduled-tasks"
+                element={<ScheduledTasksPage />}
+              />
               <Route
                 path="/workspace/integrations"
                 element={<IntegrationsPage />}

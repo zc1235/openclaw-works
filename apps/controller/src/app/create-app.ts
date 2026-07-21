@@ -14,6 +14,7 @@ import { registerMiscCompatRoutes } from "../routes/misc-compat-routes.js";
 import { registerModelRoutes } from "../routes/model-routes.js";
 import { registerProviderOAuthRoutes } from "../routes/provider-oauth-routes.js";
 import { registerRuntimeConfigRoutes } from "../routes/runtime-config-routes.js";
+import { registerScheduledTaskRoutes } from "../routes/scheduled-task-routes.js";
 import { registerSessionRoutes } from "../routes/session-routes.js";
 import { registerSkillhubRoutes } from "../routes/skillhub-routes.js";
 import { registerUserRoutes } from "../routes/user-routes.js";
@@ -43,6 +44,7 @@ export function createApp(container: ControllerContainer) {
   registerDesktopRewardsRoutes(app, container);
   registerChannelRoutes(app, container);
   registerDesktopChatRoutes(app, container);
+  registerScheduledTaskRoutes(app, container);
   registerSessionRoutes(app, container);
   registerModelRoutes(app, container);
   registerProviderOAuthRoutes(app, container);

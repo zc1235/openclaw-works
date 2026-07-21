@@ -16,6 +16,7 @@ import type {
   PersistedModelsConfig,
   RewardTask,
   RewardTaskId,
+  ScheduledTaskResponse,
 } from "@nexu/shared";
 import {
   type claimDesktopRewardResponseSchema,
@@ -641,6 +642,7 @@ export class NexuConfigStore {
         integrations: [],
         mcpServers: [],
         channels: [],
+        scheduledTasks: [],
         templates: {},
         desktop: {
           analyticsEnabled: true,
@@ -918,6 +920,67 @@ export class NexuConfigStore {
       apiKey: null,
       models: [],
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Scheduled tasks
+  // ---------------------------------------------------------------------------
+
+  async listScheduledTasks(): Promise<ScheduledTaskResponse[]> {
+    const config = await this.getConfig();
+    return config.scheduledTasks ?? [];
+  }
+
+  async getScheduledTask(id: string): Promise<ScheduledTaskResponse | null> {
+    const config = await this.getConfig();
+    return (config.scheduledTasks ?? []).find((task) => task.id === id) ?? null;
+  }
+
+  async createScheduledTask(
+    task: ScheduledTaskResponse,
+  ): Promise<ScheduledTaskResponse> {
+    await this.store.update((config) => ({
+      ...config,
+      scheduledTasks: [...(config.scheduledTasks ?? []), task],
+    }));
+    return task;
+  }
+
+  /**
+   * Merge a partial patch into a scheduled task. Used for both user edits and
+   * scheduler runtime updates (lastRunAt/status/result/nextRunAt/runCount).
+   */
+  async updateScheduledTask(
+    id: string,
+    patch: Partial<ScheduledTaskResponse>,
+  ): Promise<ScheduledTaskResponse | null> {
+    let updated: ScheduledTaskResponse | null = null;
+    await this.store.update((config) => ({
+      ...config,
+      scheduledTasks: (config.scheduledTasks ?? []).map((task) => {
+        if (task.id !== id) {
+          return task;
+        }
+        updated = { ...task, ...patch, id: task.id };
+        return updated;
+      }),
+    }));
+    return updated;
+  }
+
+  async deleteScheduledTask(id: string): Promise<boolean> {
+    let deleted = false;
+    await this.store.update((config) => {
+      const scheduledTasks = (config.scheduledTasks ?? []).filter((task) => {
+        if (task.id === id) {
+          deleted = true;
+          return false;
+        }
+        return true;
+      });
+      return { ...config, scheduledTasks };
+    });
+    return deleted;
   }
 
   async listBots(): Promise<BotResponse[]> {
