@@ -1,0 +1,9 @@
+# Bundled runtime tools (Node.js + Python) for the desktop assistant's
+# run_command tool. Populated at build time by the "Stage bundled runtime
+# tools" step in .github/workflows/desktop-build-windows.yml, which downloads:
+#   node/    -> node.exe (+ npm) from nodejs.org (win-x64)
+#   python/  -> python.exe from python.org (embeddable amd64)
+# These directories are prepended to run_command's PATH at runtime via
+# NEXU_RUNTIME_TOOLS_DIR (set in the controller runtime manifest), so the model
+# can run `node` and `python` to complete tasks. This directory is kept in git
+# (via .gitkeep) so electron-builder's extraResources source always exists.

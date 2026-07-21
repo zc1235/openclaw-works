@@ -70,8 +70,8 @@ LangString Lang_ConfirmOverwriteInstall 2052 "安装目录中已存在旧版 Nex
 LangString Lang_ErrorMoveOldInstallFailed 1033 "Failed to move the previous installation out of the target directory."
 LangString Lang_ErrorMoveOldInstallFailed 2052 "无法将旧安装从目标目录移走。"
 
-LangString Lang_FinishRunNexu 1033 "Launch Nexu"
-LangString Lang_FinishRunNexu 2052 "立即启动 Nexu"
+LangString Lang_FinishRunNexu 1033 "Launch 灵光"
+LangString Lang_FinishRunNexu 2052 "立即启动灵光"
 
 LangString Lang_FinishCreateDesktopShortcut 1033 "Create desktop shortcut"
 LangString Lang_FinishCreateDesktopShortcut 2052 "创建桌面快捷方式"

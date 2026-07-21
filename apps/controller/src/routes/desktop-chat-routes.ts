@@ -530,6 +530,9 @@ export function registerDesktopChatRoutes(
             `This conversation has a dedicated workspace directory at: ${workspaceDir}\n` +
             "When you create files for the user, write them here (run_command runs in this directory by default). " +
             "Use get_workspace_directory if you need the absolute path.\n" +
+            "A bundled Node.js and Python runtime are available via run_command (`node` and `python` are on PATH), " +
+            "so you can write a script with write_file and run it to accomplish tasks (data processing, file " +
+            "generation, calculations, automation, etc.). " +
             "Shell commands are NON-INTERACTIVE and cannot answer prompts: always use non-interactive flags " +
             "(e.g. `npm create vue@latest my-app -- --default`, `npm install`, `--yes`/`-y`). Prefer the write_file " +
             "tool over shell heredocs/echo for creating file contents. Work in small steps, and when the task is " +

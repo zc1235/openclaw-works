@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import path from "node:path";
@@ -236,7 +237,7 @@ export const LOCAL_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     function: {
       name: "run_command",
       description:
-        "Run a shell command and return its text output. On Windows the command runs via cmd /c, otherwise via /bin/sh -c, in the current conversation's workspace directory. Can be used to create, move, or modify files as well as inspect the system. IMPORTANT: commands must be NON-INTERACTIVE — they cannot answer prompts. Always pass flags that avoid prompts (e.g. npm/yarn/pnpm '--yes', scaffolders like 'npm create vue@latest my-app -- --default', 'git ... --no-edit'). Output is truncated to 32 KB and the command times out after 120 seconds, so prefer small, focused steps.",
+        "Run a shell command and return its text output. On Windows the command runs via cmd /c, otherwise via /bin/sh -c, in the current conversation's workspace directory. Can be used to create, move, or modify files as well as inspect the system. A bundled Node.js and Python runtime are always available on PATH — you can run `node` and `python` (e.g. write a script with write_file, then `node script.js` or `python script.py`) to accomplish tasks like data processing, file generation, calculations, or scraping. IMPORTANT: commands must be NON-INTERACTIVE — they cannot answer prompts. Always pass flags that avoid prompts (e.g. npm/yarn/pnpm '--yes', scaffolders like 'npm create vue@latest my-app -- --default', 'git ... --no-edit'). Output is truncated to 32 KB and the command times out after 120 seconds, so prefer small, focused steps.",
       parameters: {
         type: "object",
         properties: {
@@ -366,6 +367,9 @@ async function toolRunCommand(
       timeout: MAX_COMMAND_TIMEOUT_MS,
       maxBuffer: MAX_COMMAND_OUTPUT_BYTES * 2,
       windowsHide: true,
+      // Expose the bundled Node.js + Python runtimes on PATH so the model can
+      // run `node`/`python` regardless of whether the host has them installed.
+      env: withBundledRuntimeToolsOnPath(process.env),
       // Run inside this conversation's workspace folder so files the command
       // creates land in a per-conversation directory instead of a shared one.
       ...(opts?.workspaceDir ? { cwd: opts.workspaceDir } : {}),
@@ -384,6 +388,43 @@ async function toolRunCommand(
       content: `Command failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+/**
+ * Prepend the bundled Node.js + Python runtime directories to PATH so shell
+ * commands can invoke `node`/`python` even when the host has neither installed.
+ * The directories are shipped with the app and located via
+ * NEXU_RUNTIME_TOOLS_DIR (set in the desktop runtime manifest). Missing tools
+ * are skipped, and the original PATH always remains as a fallback.
+ */
+function withBundledRuntimeToolsOnPath(
+  baseEnv: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const toolsDir = baseEnv.NEXU_RUNTIME_TOOLS_DIR;
+  if (!toolsDir) {
+    return baseEnv;
+  }
+  const candidates = [
+    path.join(toolsDir, "node"),
+    path.join(toolsDir, "python"),
+    // The Python embeddable ships `pip`/entry-point launchers under Scripts/.
+    path.join(toolsDir, "python", "Scripts"),
+  ];
+  const existing = candidates.filter((dir) => {
+    try {
+      return existsSync(dir);
+    } catch {
+      return false;
+    }
+  });
+  if (existing.length === 0) {
+    return baseEnv;
+  }
+  const currentPath = baseEnv.PATH ?? baseEnv.Path ?? "";
+  const nextPath = [...existing, currentPath]
+    .filter((entry) => entry.length > 0)
+    .join(path.delimiter);
+  return { ...baseEnv, PATH: nextPath };
 }
 
 /**

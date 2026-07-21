@@ -378,6 +378,12 @@ export function createRuntimeUnitManifests(
     new URL(runtimeConfig.urls.openclawBase).port || 18789,
   );
   const skillNodePath = buildSkillNodePath(electronRoot, isPackaged);
+  // Directory holding the bundled Node.js + Python runtimes (node/, python/)
+  // that the desktop assistant's run_command tool exposes on PATH. Packaged
+  // via electron-builder extraResources (build/runtime-tools -> runtime-tools).
+  const runtimeToolsDir = isPackaged
+    ? path.resolve(runtimeSidecarBaseRoot, "..", "runtime-tools")
+    : path.resolve(electronRoot, "build", "runtime-tools");
   const proxyEnv = buildChildProcessProxyEnv(runtimeConfig.proxy);
   const langfuseEnv = {
     ...(process.env.LANGFUSE_PUBLIC_KEY
@@ -462,6 +468,7 @@ export function createRuntimeUnitManifests(
         "extensions",
       ),
       NODE_PATH: skillNodePath,
+      NEXU_RUNTIME_TOOLS_DIR: runtimeToolsDir,
       TMPDIR: openclawTempDir,
       ...(runtimeConfig.posthogApiKey
         ? { POSTHOG_API_KEY: runtimeConfig.posthogApiKey }

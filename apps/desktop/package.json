@@ -97,6 +97,10 @@
         "to": "runtime"
       },
       {
+        "from": "build/runtime-tools",
+        "to": "runtime-tools"
+      },
+      {
         "from": "static/bundled-skills",
         "to": "static/bundled-skills"
       },

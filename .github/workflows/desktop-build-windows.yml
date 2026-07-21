@@ -89,6 +89,47 @@ jobs:
       - name: Build workspace artifacts
         run: pnpm build
 
+      - name: Stage bundled runtime tools (Node + Python)
+        shell: pwsh
+        # Downloads a self-contained Node.js and Python runtime into
+        # apps/desktop/build/runtime-tools so the packaged app can run `node`
+        # and `python` from the assistant's run_command tool. Non-fatal: if a
+        # download hiccups the build still succeeds (feature degrades).
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toolsDir = Join-Path $PWD "apps/desktop/build/runtime-tools"
+          New-Item -ItemType Directory -Force -Path (Join-Path $toolsDir "node") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $toolsDir "python") | Out-Null
+          $tmp = Join-Path $env:RUNNER_TEMP "rt-tools"
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
+          try {
+            $nodeVersion = "v20.18.1"
+            $nodeZip = Join-Path $tmp "node.zip"
+            Invoke-WebRequest -UseBasicParsing -Uri "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-win-x64.zip" -OutFile $nodeZip
+            $nodeExtract = Join-Path $tmp "node"
+            Expand-Archive -Path $nodeZip -DestinationPath $nodeExtract -Force
+            $nodeInner = Join-Path $nodeExtract "node-$nodeVersion-win-x64"
+            Copy-Item (Join-Path $nodeInner "*") (Join-Path $toolsDir "node") -Recurse -Force
+            Write-Host "Staged Node.js $nodeVersion"
+          } catch {
+            Write-Warning "Failed to stage Node.js runtime: $($_.Exception.Message)"
+          }
+
+          try {
+            $pyVersion = "3.12.7"
+            $pyZip = Join-Path $tmp "python.zip"
+            Invoke-WebRequest -UseBasicParsing -Uri "https://www.python.org/ftp/python/$pyVersion/python-$pyVersion-embed-amd64.zip" -OutFile $pyZip
+            Expand-Archive -Path $pyZip -DestinationPath (Join-Path $toolsDir "python") -Force
+            Write-Host "Staged Python $pyVersion"
+          } catch {
+            Write-Warning "Failed to stage Python runtime: $($_.Exception.Message)"
+          }
+
+          Write-Host "runtime-tools contents:"
+          Get-ChildItem -Recurse (Join-Path $toolsDir "node") -ErrorAction SilentlyContinue | Select-Object -First 5 Name
+          Get-ChildItem -Recurse (Join-Path $toolsDir "python") -ErrorAction SilentlyContinue | Select-Object -First 5 Name
+
       - name: Build unsigned Windows desktop bundle
         env:
           NEXU_DESKTOP_AUTO_UPDATE_ENABLED: "false"
