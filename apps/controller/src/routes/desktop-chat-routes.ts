@@ -27,7 +27,9 @@ const HISTORY_MESSAGE_LIMIT = 40;
 const MAX_TOOL_ROUNDTRIPS = 200;
 const MAX_SUBAGENTS = 4;
 const MAX_SUBAGENTS_PER_TURN = 4;
-const MAX_SUBAGENT_TOOL_ROUNDS = 20;
+// Delegated tasks can be as substantial as the parent task. Keep the same
+// runaway-safe per-turn cap rather than prematurely stopping child execution.
+const MAX_SUBAGENT_TOOL_ROUNDS = MAX_TOOL_ROUNDTRIPS;
 const MAX_SUBAGENT_RESULT_CHARS = 16_000;
 
 // Module-scoped encoder — TextEncoder is a value binding in @types/node
