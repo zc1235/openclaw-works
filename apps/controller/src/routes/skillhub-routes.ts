@@ -8,6 +8,7 @@ const minimalSkillSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string(),
+  author: z.string().optional(),
   downloads: z.number(),
   stars: z.number(),
   tags: z.array(z.string()),
@@ -106,6 +107,7 @@ const skillhubDetailResponseSchema = z.object({
   slug: z.string(),
   name: z.string(),
   description: z.string(),
+  author: z.string().optional(),
   downloads: z.number(),
   stars: z.number(),
   tags: z.array(z.string()),
@@ -387,6 +389,7 @@ export function registerSkillhubRoutes(
           name: catalogSkill?.name ?? installedSkill?.name ?? slug,
           description:
             catalogSkill?.description ?? installedSkill?.description ?? "",
+          author: catalogSkill?.author ?? "",
           downloads,
           stars: catalogSkill?.stars ?? 0,
           tags: catalogSkill?.tags ?? [],

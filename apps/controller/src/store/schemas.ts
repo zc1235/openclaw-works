@@ -561,6 +561,12 @@ const nexuConfigObjectSchema = z.object({
       cloud: z.unknown().optional(),
       locale: z.enum(["en", "zh-CN"]).optional(),
       analyticsEnabled: z.boolean().optional(),
+      /**
+       * When true, the desktop-chat assistant is restricted to read-only
+       * filesystem tools (sandbox ON). When false/undefined it may create and
+       * modify files and run commands. Defaults to allowed.
+       */
+      agentSandbox: z.boolean().optional(),
     })
     .catchall(z.unknown())
     .default({}),

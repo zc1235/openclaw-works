@@ -2,6 +2,12 @@ export type MinimalSkill = {
   slug: string;
   name: string;
   description: string;
+  /**
+   * Owner/author handle of the skill on ClawHub (e.g. "oswalpalash").
+   * Used to disambiguate installs when several authors publish the same slug —
+   * clawhub accepts an `owner/slug` target. Empty string when unknown.
+   */
+  author: string;
   downloads: number;
   stars: number;
   tags: string[];

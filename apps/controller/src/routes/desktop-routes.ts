@@ -61,16 +61,20 @@ const fallbackEventsQuerySchema = z.object({
 const desktopPreferencesResponseSchema = z.object({
   locale: z.enum(["en", "zh-CN"]).nullable(),
   analyticsEnabled: z.boolean(),
+  agentSandbox: z.boolean(),
 });
 
 const desktopPreferencesUpdateSchema = z
   .object({
     locale: z.enum(["en", "zh-CN"]).optional(),
     analyticsEnabled: z.boolean().optional(),
+    agentSandbox: z.boolean().optional(),
   })
   .refine(
     (value) =>
-      value.locale !== undefined || value.analyticsEnabled !== undefined,
+      value.locale !== undefined ||
+      value.analyticsEnabled !== undefined ||
+      value.agentSandbox !== undefined,
     {
       message: "At least one desktop preference must be provided",
     },
@@ -257,6 +261,7 @@ export function registerDesktopRoutes(
           locale: await container.configStore.getStoredDesktopLocale(),
           analyticsEnabled:
             await container.configStore.getDesktopAnalyticsEnabled(),
+          agentSandbox: await container.configStore.getDesktopAgentSandbox(),
         },
         200,
       );
@@ -297,8 +302,14 @@ export function registerDesktopRoutes(
               body.analyticsEnabled,
             )
           : await container.configStore.getDesktopAnalyticsEnabled();
+      const agentSandbox =
+        body.agentSandbox !== undefined
+          ? await container.configStore.setDesktopAgentSandbox(
+              body.agentSandbox,
+            )
+          : await container.configStore.getDesktopAgentSandbox();
       await container.openclawSyncService.syncAll();
-      return c.json({ locale, analyticsEnabled }, 200);
+      return c.json({ locale, analyticsEnabled, agentSandbox }, 200);
     },
   );
 

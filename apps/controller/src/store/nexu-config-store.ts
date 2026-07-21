@@ -2132,6 +2132,28 @@ export class NexuConfigStore {
     return enabled;
   }
 
+  /**
+   * Whether desktop-chat runs in sandbox mode (read-only filesystem tools).
+   * Defaults to false — the assistant may create/modify files and run
+   * commands unless the user explicitly enables the sandbox.
+   */
+  async getDesktopAgentSandbox(): Promise<boolean> {
+    const config = await this.getConfig();
+    return config.desktop.agentSandbox === true;
+  }
+
+  async setDesktopAgentSandbox(enabled: boolean): Promise<boolean> {
+    await this.store.update((config) => ({
+      ...config,
+      desktop: {
+        ...config.desktop,
+        agentSandbox: enabled,
+      },
+    }));
+
+    return enabled;
+  }
+
   async refreshDesktopCloudModels() {
     await this.hydrateDesktopCloudModels(true);
     return this.getDesktopCloudStatus();

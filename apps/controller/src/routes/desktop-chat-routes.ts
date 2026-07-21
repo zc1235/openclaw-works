@@ -8,7 +8,8 @@ import {
 } from "@nexu/shared";
 import type { ControllerContainer } from "../app/container.js";
 import {
-  LOCAL_TOOL_DEFINITIONS,
+  type OpenAiToolDefinition,
+  buildLocalToolDefinitions,
   executeLocalTool,
   summariseToolCall,
 } from "../lib/local-tools.js";
@@ -53,6 +54,7 @@ interface ResolvedProvider {
 
 interface StreamAccumulator {
   text: string;
+  reasoning: string;
   toolCalls: OpenAiToolCall[];
   finishReason: string | null;
   streamError: string | null;
@@ -267,10 +269,12 @@ async function loadHistoryMessages(
 async function streamOneRound(params: {
   resolved: ResolvedProvider;
   messages: OpenAiChatMessage[];
+  tools: OpenAiToolDefinition[];
   sseController: ReadableStreamDefaultController<Uint8Array>;
 }): Promise<StreamAccumulator> {
   const accumulator: StreamAccumulator = {
     text: "",
+    reasoning: "",
     toolCalls: [],
     finishReason: null,
     streamError: null,
@@ -289,7 +293,7 @@ async function streamOneRound(params: {
         model: params.resolved.modelId,
         messages: params.messages,
         stream: true,
-        tools: LOCAL_TOOL_DEFINITIONS,
+        tools: params.tools,
         tool_choice: "auto",
       }),
     },
@@ -317,6 +321,8 @@ async function streamOneRound(params: {
         choices?: Array<{
           delta?: {
             content?: string;
+            reasoning_content?: string;
+            reasoning?: string;
             tool_calls?: Array<{
               index?: number;
               id?: string;
@@ -332,6 +338,16 @@ async function streamOneRound(params: {
         return;
       }
       const delta = choice.delta;
+      // Reasoning / chain-of-thought deltas (DeepSeek `reasoning_content`,
+      // OpenRouter/others `reasoning`). Streamed as a distinct event so the UI
+      // can render a collapsible "thinking" section separate from the answer.
+      const reasoningChunk = delta?.reasoning_content ?? delta?.reasoning;
+      if (reasoningChunk) {
+        accumulator.reasoning += reasoningChunk;
+        params.sseController.enqueue(
+          encodeSse({ type: "reasoning", text: reasoningChunk }),
+        );
+      }
       if (delta?.content) {
         accumulator.text += delta.content;
         params.sseController.enqueue(
@@ -519,7 +535,15 @@ export function registerDesktopChatRoutes(
       outgoing.push(...historyMessages);
       outgoing.push({ role: "user", content: body.text });
 
-      const localToolOptions = workspaceDir ? { workspaceDir } : undefined;
+      // Sandbox mode (read-only) is opt-in. When off, the assistant may create
+      // and modify files and run commands.
+      const allowFileWrites =
+        !(await container.configStore.getDesktopAgentSandbox());
+      const toolDefinitions = buildLocalToolDefinitions(allowFileWrites);
+      const localToolOptions = {
+        ...(workspaceDir ? { workspaceDir } : {}),
+        allowFileWrites,
+      };
 
       const stream = new ReadableStream<Uint8Array>({
         async start(sseController) {
@@ -540,6 +564,7 @@ export function registerDesktopChatRoutes(
             const result = await streamOneRound({
               resolved,
               messages: runningMessages,
+              tools: toolDefinitions,
               sseController,
             });
             assistantText += result.text;

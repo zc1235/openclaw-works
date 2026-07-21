@@ -1,0 +1,14 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="灵光">
+  <defs>
+    <linearGradient id="lingguang-grad" x1="12" y1="8" x2="88" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4F5BF2"/>
+      <stop offset="1" stop-color="#9244EE"/>
+    </linearGradient>
+  </defs>
+  <path
+    d="M50 6 C 55 33, 67 45, 94 50 C 67 55, 55 67, 50 94 C 45 67, 33 55, 6 50 C 33 45, 45 33, 50 6 Z"
+    fill="url(#lingguang-grad)"/>
+  <path
+    d="M81 10 C 82 17, 85 20, 92 21 C 85 22, 82 25, 81 32 C 80 25, 77 22, 70 21 C 77 20, 80 17, 81 10 Z"
+    fill="url(#lingguang-grad)" opacity="0.85"/>
+</svg>

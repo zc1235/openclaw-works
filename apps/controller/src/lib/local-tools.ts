@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -63,7 +63,15 @@ export interface LocalToolExecutionResult {
 export interface LocalToolOptions {
   /** Absolute path to this conversation's workspace directory, if any. */
   workspaceDir?: string;
+  /**
+   * When false, filesystem-mutating tools (write_file, create_directory) and
+   * shell execution (run_command) are disabled — the "sandbox" is ON. Defaults
+   * to allowed so the assistant can create files the user asks for.
+   */
+  allowFileWrites?: boolean;
 }
+
+const MAX_WRITE_FILE_BYTES = 5 * 1024 * 1024;
 
 /** Expand a leading `~` to the user's home directory. */
 function expandUser(p: string): string {
@@ -183,16 +191,59 @@ export const LOCAL_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "write_file",
+      description:
+        "Create or overwrite a text file with the given UTF-8 content. Accepts absolute paths or `~/…` shortcuts; a bare filename or relative path is written inside the current conversation's workspace directory. Parent directories are created automatically. This is the preferred way to create files for the user.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description:
+              "Target file path. Absolute, `~/…`, or a name/relative path (resolved inside the conversation workspace).",
+          },
+          content: {
+            type: "string",
+            description: "The full UTF-8 text content to write to the file.",
+          },
+        },
+        required: ["path", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_directory",
+      description:
+        "Create a directory (and any missing parent directories). Accepts absolute paths, `~/…`, or a relative path inside the current conversation's workspace directory.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Directory path to create.",
+          },
+        },
+        required: ["path"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "run_command",
       description:
-        "Run a shell-safe command that returns text output. Use only when list_directory / read_file cannot answer the question. On Windows the command runs via cmd /c, otherwise via /bin/sh -c. Output is truncated to 32 KB and the command times out after 30 seconds.",
+        "Run a shell command and return its text output. On Windows the command runs via cmd /c, otherwise via /bin/sh -c, in the current conversation's workspace directory. Can be used to create, move, or modify files as well as inspect the system. Output is truncated to 32 KB and the command times out after 30 seconds.",
       parameters: {
         type: "object",
         properties: {
           command: {
             type: "string",
             description:
-              "The command to run. Prefer short read-only commands like `dir`, `ls`, `where`, `whoami`, `pwd`.",
+              "The command to run (e.g. `ls`, `dir`, `echo hello > note.txt`).",
           },
         },
         required: ["command"],
@@ -201,6 +252,29 @@ export const LOCAL_TOOL_DEFINITIONS: OpenAiToolDefinition[] = [
     },
   },
 ];
+
+/** Names of tools that mutate the filesystem or execute shell commands. */
+const WRITE_TOOL_NAMES = new Set([
+  "write_file",
+  "create_directory",
+  "run_command",
+]);
+
+/**
+ * The subset of tools advertised to the model for a given call. When file
+ * writes are disabled (sandbox ON), mutating/execution tools are withheld so
+ * the model doesn't attempt actions that would be rejected.
+ */
+export function buildLocalToolDefinitions(
+  allowFileWrites: boolean,
+): OpenAiToolDefinition[] {
+  if (allowFileWrites) {
+    return LOCAL_TOOL_DEFINITIONS;
+  }
+  return LOCAL_TOOL_DEFINITIONS.filter(
+    (def) => !WRITE_TOOL_NAMES.has(def.function.name),
+  );
+}
 
 function truncateForModel(text: string, maxBytes: number): string {
   const buffer = Buffer.from(text, "utf8");
@@ -312,12 +386,85 @@ async function toolRunCommand(
   }
 }
 
+/**
+ * Resolve a path argument for a write tool. Absolute and `~/…` paths are used
+ * as-is; a bare filename or relative path is resolved inside the conversation
+ * workspace directory (falling back to the process CWD when none is set).
+ */
+function resolveWritePath(raw: string, opts?: LocalToolOptions): string {
+  const expanded = expandUser(raw);
+  if (path.isAbsolute(expanded)) {
+    return path.resolve(expanded);
+  }
+  const base = opts?.workspaceDir ?? process.cwd();
+  return path.resolve(base, expanded);
+}
+
+async function toolWriteFile(
+  args: Record<string, unknown>,
+  opts?: LocalToolOptions,
+): Promise<LocalToolExecutionResult> {
+  const raw = typeof args.path === "string" ? args.path : "";
+  const content = typeof args.content === "string" ? args.content : "";
+  if (!raw) {
+    return { ok: false, content: "Missing `path` argument" };
+  }
+  const byteLength = Buffer.byteLength(content, "utf8");
+  if (byteLength > MAX_WRITE_FILE_BYTES) {
+    return {
+      ok: false,
+      content: `Refusing to write ${byteLength} bytes (max ${MAX_WRITE_FILE_BYTES}).`,
+    };
+  }
+  const abs = resolveWritePath(raw, opts);
+  try {
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, content, "utf8");
+    return { ok: true, content: `Wrote ${byteLength} bytes to ${abs}` };
+  } catch (error) {
+    return {
+      ok: false,
+      content: `Failed to write ${abs}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function toolCreateDirectory(
+  args: Record<string, unknown>,
+  opts?: LocalToolOptions,
+): Promise<LocalToolExecutionResult> {
+  const raw = typeof args.path === "string" ? args.path : "";
+  if (!raw) {
+    return { ok: false, content: "Missing `path` argument" };
+  }
+  const abs = resolveWritePath(raw, opts);
+  try {
+    await mkdir(abs, { recursive: true });
+    return { ok: true, content: `Created directory ${abs}` };
+  } catch (error) {
+    return {
+      ok: false,
+      content: `Failed to create directory ${abs}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 /** Execute a tool call by name. */
 export async function executeLocalTool(
   name: string,
   args: Record<string, unknown>,
   opts?: LocalToolOptions,
 ): Promise<LocalToolExecutionResult> {
+  // Guard: reject mutating/execution tools when file writes are disabled.
+  // `allowFileWrites` defaults to allowed (undefined === allowed) so read-only
+  // tools always work and callers that don't set it keep prior behaviour.
+  if (WRITE_TOOL_NAMES.has(name) && opts?.allowFileWrites === false) {
+    return {
+      ok: false,
+      content:
+        "File writes and command execution are disabled (sandbox mode is ON). Ask the user to turn off sandbox mode in Settings to allow this.",
+    };
+  }
   switch (name) {
     case "get_home_directory":
       return { ok: true, content: homedir() };
@@ -346,6 +493,10 @@ export async function executeLocalTool(
       return toolReadFile(args);
     case "run_command":
       return toolRunCommand(args, opts);
+    case "write_file":
+      return toolWriteFile(args, opts);
+    case "create_directory":
+      return toolCreateDirectory(args, opts);
     default:
       return { ok: false, content: `Unknown tool: ${name}` };
   }
@@ -371,6 +522,14 @@ export function summariseToolCall(
         : "run_command";
     case "get_workspace_directory":
       return "get_workspace_directory";
+    case "write_file":
+      return typeof args.path === "string"
+        ? `write_file: ${args.path}`
+        : "write_file";
+    case "create_directory":
+      return typeof args.path === "string"
+        ? `create_directory: ${args.path}`
+        : "create_directory";
     default:
       return name;
   }

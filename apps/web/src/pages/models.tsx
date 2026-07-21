@@ -32,6 +32,7 @@ import {
   LogIn,
   Monitor,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -42,6 +43,7 @@ import { toast } from "sonner";
 import {
   deleteApiV1ModelProvidersMinimaxOauthLogin,
   getApiInternalDesktopDefaultModel,
+  getApiInternalDesktopPreferences,
   getApiInternalDesktopReady,
   getApiV1ModelProvidersByProviderIdOauthProviderStatus,
   getApiV1ModelProvidersByProviderIdOauthStatus,
@@ -57,6 +59,7 @@ import {
   postApiV1ModelProvidersByProviderIdValidate,
   postApiV1ModelProvidersInstancesValidate,
   postApiV1ModelProvidersMinimaxOauthLogin,
+  patchApiInternalDesktopPreferences,
   putApiInternalDesktopDefaultModel,
   putApiV1ModelProvidersConfig,
 } from "../../lib/api/sdk.gen";
@@ -644,6 +647,33 @@ function _GeneralSettings() {
     },
   });
 
+  const { data: desktopPreferences } = useQuery({
+    queryKey: ["desktop-preferences"],
+    queryFn: async () => {
+      const { data } = await getApiInternalDesktopPreferences();
+      return data ?? null;
+    },
+  });
+
+  const updateAgentSandbox = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const { data } = await patchApiInternalDesktopPreferences({
+        body: { agentSandbox: enabled },
+      });
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.setQueryData(["desktop-preferences"], data);
+      }
+    },
+    onError: () => {
+      toast.error(t("settings.desktop.updateFailed"));
+    },
+  });
+
+  const agentSandboxEnabled = desktopPreferences?.agentSandbox ?? false;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
@@ -694,6 +724,36 @@ function _GeneralSettings() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-surface-1">
+        <div className="border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={14} className="text-text-secondary" />
+            <div className="text-[13px] font-semibold text-text-primary">
+              {t("settings.section.assistant")}
+            </div>
+          </div>
+        </div>
+        <div className="px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[12px] font-medium text-text-primary">
+                {t("settings.agent.sandbox")}
+              </div>
+              <div className="mt-0.5 text-[11px] text-text-tertiary">
+                {t("settings.agent.sandboxHint")}
+              </div>
+            </div>
+            <Switch
+              checked={agentSandboxEnabled}
+              disabled={updateAgentSandbox.isPending}
+              onCheckedChange={(checked) => {
+                void updateAgentSandbox.mutateAsync(checked);
+              }}
+            />
           </div>
         </div>
       </div>
@@ -1364,8 +1424,8 @@ export function ModelsPage() {
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-accent/10 to-accent/5">
                     <img
-                      src="/brand/logo-black-1.svg"
-                      alt="nexu"
+                      src="/brand/logo-lingguang.svg"
+                      alt="灵光"
                       className="h-5 w-5 object-contain"
                     />
                   </div>

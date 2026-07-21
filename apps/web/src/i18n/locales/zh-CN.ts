@@ -453,6 +453,10 @@ const zhCN = {
   "settings.desktop.showInTaskbar": "在任务栏中显示",
   "settings.desktop.showInTaskbarHint":
     "显示在任务栏中；关闭后仅保留系统托盘入口",
+  "settings.section.assistant": "助手",
+  "settings.agent.sandbox": "沙箱模式",
+  "settings.agent.sandboxHint":
+    "开启后助手只能读取文件；关闭后可允许助手在对话工作空间中创建、编辑文件并执行命令。",
   "settings.desktop.updateFailed": "更新桌面设置失败",
   "settings.data.analytics": "使用分析",
   "settings.data.analyticsHint": "发送匿名使用数据以帮助改进灵光",
@@ -1261,6 +1265,10 @@ const zhCN = {
   "desktopChat.send": "发送",
   "desktopChat.abort": "停止",
   "desktopChat.streaming": "回复中…",
+  "desktopChat.thinking": "思考中…",
+  "desktopChat.thoughtDone": "思考过程",
+  "desktopChat.toolCalls": "工具调用（{{count}}）",
+  "desktopChat.working": "处理中…",
   "desktopChat.youInitial": "我",
   "desktopChat.untitled": "未命名对话",
   "desktopChat.error.noBot": "还没有 Agent，请先在首页创建一个。",

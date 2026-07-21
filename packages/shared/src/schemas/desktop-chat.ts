@@ -50,6 +50,10 @@ export const desktopStreamEventSchema = z.discriminatedUnion("type", [
     text: z.string(),
   }),
   z.object({
+    type: z.literal("reasoning"),
+    text: z.string(),
+  }),
+  z.object({
     type: z.literal("toolCall"),
     name: z.string(),
     summary: z.string().optional(),

@@ -86,8 +86,8 @@ export function CommunitySkillCard({
           <span className="text-[13px] font-semibold text-text-primary truncate block">
             {skill.name}
           </span>
-          <span className="text-[11px] text-text-muted font-mono">
-            {skill.slug}
+          <span className="text-[11px] text-text-muted font-mono truncate block">
+            {skill.author ? `${skill.author}/${skill.slug}` : skill.slug}
           </span>
         </div>
         <div

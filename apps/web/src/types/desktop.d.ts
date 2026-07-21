@@ -46,6 +46,8 @@ export type MinimalSkill = {
   slug: string;
   name: string;
   description: string;
+  /** Owner/author handle on ClawHub (may be empty when unknown). */
+  author?: string;
   downloads: number;
   stars: number;
   tags: string[];

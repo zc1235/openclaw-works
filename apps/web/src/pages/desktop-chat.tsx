@@ -2,7 +2,16 @@ import { ChatMarkdown } from "@/components/ui/chat-markdown";
 import { streamDesktopChat } from "@/lib/desktop-chat-stream";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageSquarePlus, Send, Square } from "lucide-react";
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  MessageSquarePlus,
+  Send,
+  Square,
+  Wrench,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -15,10 +24,20 @@ import {
 
 const BOT_AVATAR = "/brand/ip-nexu.svg";
 
+interface ToolCallEntry {
+  id: string;
+  name: string;
+  summary: string;
+}
+
 interface StreamMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
+  /** Accumulated chain-of-thought / reasoning stream, if the model emits it. */
+  reasoning?: string;
+  /** Structured tool-call badges shown as a collapsible trace. */
+  toolCalls?: ToolCallEntry[];
   pending?: boolean;
   error?: boolean;
 }
@@ -79,6 +98,102 @@ function extractText(msg: Record<string, unknown>): string {
 
 function makeLocalMessageId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Collapsible trace section used for the model's thinking process and tool
+ * calls. Stays open while the turn is streaming and auto-collapses once it's
+ * done, but the user can always toggle it back open to review.
+ */
+function CollapsibleTrace({
+  icon,
+  title,
+  done,
+  defaultOpen = true,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  done: boolean;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const prevDone = useRef(done);
+
+  // Auto-collapse on the transition from streaming -> done.
+  useEffect(() => {
+    if (done && !prevDone.current) {
+      setOpen(false);
+    }
+    prevDone.current = done;
+  }, [done]);
+
+  return (
+    <div className="w-full rounded-xl border border-border bg-surface-1/60">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-medium text-text-secondary hover:text-text-primary"
+      >
+        <span className="text-text-muted">{icon}</span>
+        <span className="flex-1 truncate">{title}</span>
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+      </button>
+      {open && (
+        <div className="border-t border-border px-3 py-2">{children}</div>
+      )}
+    </div>
+  );
+}
+
+function ThinkingBlock({
+  reasoning,
+  done,
+}: {
+  reasoning: string;
+  done: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <CollapsibleTrace
+      icon={<Brain size={13} />}
+      title={done ? t("desktopChat.thoughtDone") : t("desktopChat.thinking")}
+      done={done}
+    >
+      <div className="whitespace-pre-wrap text-[12px] leading-relaxed text-text-muted">
+        {reasoning}
+      </div>
+    </CollapsibleTrace>
+  );
+}
+
+function ToolCallsBlock({
+  toolCalls,
+  done,
+}: {
+  toolCalls: ToolCallEntry[];
+  done: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <CollapsibleTrace
+      icon={<Wrench size={13} />}
+      title={t("desktopChat.toolCalls", { count: toolCalls.length })}
+      done={done}
+    >
+      <ul className="flex flex-col gap-1">
+        {toolCalls.map((call) => (
+          <li
+            key={call.id}
+            className="font-mono text-[11px] leading-relaxed text-text-secondary break-words"
+          >
+            {call.summary}
+          </li>
+        ))}
+      </ul>
+    </CollapsibleTrace>
+  );
 }
 
 export function DesktopChatPage() {
@@ -264,10 +379,27 @@ export function DesktopChatPage() {
                     message.id === assistantMessage.id
                       ? {
                           ...message,
-                          text:
-                            message.text.length > 0
-                              ? `${message.text}\n\n[tool] ${event.summary ?? event.name}`
-                              : `[tool] ${event.summary ?? event.name}`,
+                          toolCalls: [
+                            ...(message.toolCalls ?? []),
+                            {
+                              id: `${message.id}-tool-${(message.toolCalls?.length ?? 0) + 1}`,
+                              name: event.name,
+                              summary: event.summary ?? event.name,
+                            },
+                          ],
+                        }
+                      : message,
+                  ),
+                );
+                break;
+              }
+              case "reasoning": {
+                setStreamMessages((previous) =>
+                  previous.map((message) =>
+                    message.id === assistantMessage.id
+                      ? {
+                          ...message,
+                          reasoning: (message.reasoning ?? "") + event.text,
                         }
                       : message,
                   ),
@@ -503,34 +635,61 @@ export function DesktopChatPage() {
                     )}
                     <div
                       className={cn(
-                        "flex max-w-[44rem] flex-col gap-1",
-                        isBot ? "items-start" : "items-end text-right",
+                        "flex max-w-[44rem] flex-col gap-1.5",
+                        isBot
+                          ? "w-full items-start"
+                          : "items-end text-right",
                       )}
                     >
-                      <div
-                        className={cn(
-                          "inline-block max-w-full rounded-[20px] px-4 py-3 text-[13px] break-words shadow-[0_10px_24px_rgba(15,23,42,0.04)]",
-                          isBot
-                            ? "border border-border bg-surface-1 text-text-primary rounded-tl-sm"
-                            : "bg-surface-3 text-text-primary rounded-tr-sm",
-                          message.error && "border-destructive text-destructive",
+                      {isBot &&
+                        message.reasoning &&
+                        message.reasoning.length > 0 && (
+                          <ThinkingBlock
+                            reasoning={message.reasoning}
+                            done={!message.pending}
+                          />
                         )}
-                      >
-                        {message.text.length > 0 ? (
-                          isBot ? (
+                      {isBot &&
+                        message.toolCalls &&
+                        message.toolCalls.length > 0 && (
+                          <ToolCallsBlock
+                            toolCalls={message.toolCalls}
+                            done={!message.pending}
+                          />
+                        )}
+                      {message.text.length > 0 ? (
+                        <div
+                          className={cn(
+                            "inline-block max-w-full rounded-[20px] px-4 py-3 text-[13px] break-words shadow-[0_10px_24px_rgba(15,23,42,0.04)]",
+                            isBot
+                              ? "border border-border bg-surface-1 text-text-primary rounded-tl-sm"
+                              : "bg-surface-3 text-text-primary rounded-tr-sm",
+                            message.error &&
+                              "border-destructive text-destructive",
+                          )}
+                        >
+                          {isBot ? (
                             <ChatMarkdown content={message.text} />
                           ) : (
                             <span className="whitespace-pre-wrap">
                               {message.text}
                             </span>
-                          )
-                        ) : (
-                          <Loader2
-                            className="animate-spin text-text-muted"
-                            size={14}
-                          />
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      ) : (
+                        message.pending && (
+                          <div className="inline-flex items-center gap-2 rounded-[20px] border border-border bg-surface-1 px-4 py-3 text-text-muted">
+                            <Loader2 className="animate-spin" size={14} />
+                            {(message.reasoning && message.reasoning.length > 0) ||
+                            (message.toolCalls &&
+                              message.toolCalls.length > 0) ? (
+                              <span className="text-[11px]">
+                                {t("desktopChat.working")}
+                              </span>
+                            ) : null}
+                          </div>
+                        )
+                      )}
                       {isBot && message.pending && message.text.length > 0 && (
                         <div className="pl-1 text-[10px] text-text-muted">
                           {t("desktopChat.streaming")}

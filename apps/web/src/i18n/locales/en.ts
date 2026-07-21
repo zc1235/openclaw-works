@@ -478,6 +478,10 @@ const en = {
   "settings.desktop.showInTaskbar": "Show in taskbar",
   "settings.desktop.showInTaskbarHint":
     "Show 灵光 in the taskbar; when off, it stays in the system tray only",
+  "settings.section.assistant": "Assistant",
+  "settings.agent.sandbox": "Sandbox mode",
+  "settings.agent.sandboxHint":
+    "When on, the assistant can only read files. Turn it off to let the assistant create and edit files and run commands in the conversation workspace.",
   "settings.desktop.updateFailed": "Failed to update desktop setting",
   "settings.data.analytics": "Usage analytics",
   "settings.data.analyticsHint": "Help improve 灵光 with anonymous usage data",
@@ -1331,6 +1335,10 @@ const en = {
   "desktopChat.send": "Send",
   "desktopChat.abort": "Stop",
   "desktopChat.streaming": "Replying…",
+  "desktopChat.thinking": "Thinking…",
+  "desktopChat.thoughtDone": "Thought process",
+  "desktopChat.toolCalls": "Tool calls ({{count}})",
+  "desktopChat.working": "Working…",
   "desktopChat.youInitial": "Y",
   "desktopChat.untitled": "Untitled chat",
   "desktopChat.error.noBot":

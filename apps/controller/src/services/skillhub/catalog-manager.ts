@@ -157,6 +157,48 @@ function isValidSlug(slug: string): boolean {
   return SLUG_REGEX.test(slug);
 }
 
+/** ClawHub owner handles are short lowercase identifiers. */
+const AUTHOR_HANDLE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+
+/**
+ * Best-effort extraction of an owner/author handle from a raw catalog index
+ * entry. Different catalog snapshots have used different shapes, so we probe a
+ * list of likely keys and also unwrap nested `{handle|login|username|name}`
+ * objects. Returns "" when nothing usable is found.
+ */
+function extractAuthorHandle(entry: Record<string, unknown>): string {
+  const candidates: unknown[] = [
+    entry.author,
+    entry.owner,
+    entry.ownerHandle,
+    entry.owner_handle,
+    entry.authorHandle,
+    entry.author_handle,
+    entry.publisher,
+    entry.namespace,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      const handle = candidate.trim().replace(/^@+/, "");
+      if (AUTHOR_HANDLE_REGEX.test(handle)) {
+        return handle;
+      }
+    }
+    if (candidate && typeof candidate === "object") {
+      const nested = candidate as Record<string, unknown>;
+      const nestedValue =
+        nested.handle ?? nested.login ?? nested.username ?? nested.name;
+      if (typeof nestedValue === "string" && nestedValue.trim().length > 0) {
+        const handle = nestedValue.trim().replace(/^@+/, "");
+        if (AUTHOR_HANDLE_REGEX.test(handle)) {
+          return handle;
+        }
+      }
+    }
+  }
+  return "";
+}
+
 function resolveSkillPath(skillsDir: string, slug: string): string | null {
   const rootDir = resolve(skillsDir);
   const skillPath = resolve(rootDir, slug);
@@ -375,7 +417,26 @@ export class CatalogManager {
    * first fully-qualified `@owner/slug` ref so the install succeeds without
    * user intervention. Throws on any other failure.
    */
-  private async runClawhubInstall(slugOrRef: string): Promise<void> {
+  /**
+   * Resolve the owner/author handle for a slug from the cached catalog. When
+   * several catalog entries share the same slug (multiple authors publish it),
+   * prefer the most-downloaded one so we install the canonical skill.
+   */
+  private resolveAuthorForSlug(slug: string): string {
+    const matches = this.readCachedSkills().filter(
+      (s) => s.slug === slug && s.author && s.author.length > 0,
+    );
+    if (matches.length === 0) {
+      return "";
+    }
+    matches.sort((a, b) => (b.downloads ?? 0) - (a.downloads ?? 0));
+    return matches[0]?.author ?? "";
+  }
+
+  private async runClawhubInstall(
+    slugOrRef: string,
+    author?: string,
+  ): Promise<void> {
     const clawHubBin = resolveClawHubBin();
     const runOnce = async (target: string) => {
       await execFileAsync(
@@ -393,6 +454,31 @@ export class CatalogManager {
         { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
       );
     };
+
+    // When we already know the author (from the catalog), install the
+    // owner-qualified `owner/slug` target directly. This avoids the round-trip
+    // through an AMBIGUOUS_SKILL_SLUG failure when multiple authors publish the
+    // same slug — the common cause of "install failed" for popular skill names.
+    const trimmedAuthor = author?.trim().replace(/^@+/, "") ?? "";
+    const primaryTarget =
+      trimmedAuthor.length > 0 && !slugOrRef.includes("/")
+        ? `${trimmedAuthor}/${slugOrRef}`
+        : slugOrRef;
+
+    try {
+      await runOnce(primaryTarget);
+      return;
+    } catch (primaryError) {
+      // If the owner-qualified attempt failed, fall back to the bare slug so we
+      // can still parse an AMBIGUOUS_SKILL_SLUG response (or surface the real
+      // error) below.
+      if (primaryTarget !== slugOrRef) {
+        this.log(
+          "warn",
+          `qualified install ${primaryTarget} failed; retrying bare slug ${slugOrRef}: ${extractProcessOutput(primaryError)}`,
+        );
+      }
+    }
 
     try {
       await runOnce(slugOrRef);
@@ -443,7 +529,7 @@ export class CatalogManager {
 
     this.log("info", `installing skill slug=${slug} dir=${this.skillsDir}`);
     try {
-      await this.runClawhubInstall(slug);
+      await this.runClawhubInstall(slug, this.resolveAuthorForSlug(slug));
       this.log("info", `install ok slug=${slug}`);
       await this.installSkillDeps(resolve(this.skillsDir, slug), slug);
       this.db.recordInstall(slug, "managed");
@@ -466,7 +552,7 @@ export class CatalogManager {
     }
 
     this.log("info", `installing: ${slug} -> ${this.skillsDir}`);
-    await this.runClawhubInstall(slug);
+    await this.runClawhubInstall(slug, this.resolveAuthorForSlug(slug));
     await this.installSkillDeps(resolve(this.skillsDir, slug), slug);
   }
 
@@ -622,7 +708,7 @@ export class CatalogManager {
     ): Promise<{ slug: string; ok: boolean }> => {
       try {
         this.log("info", `curated installing: ${slug} -> ${this.skillsDir}`);
-        await this.runClawhubInstall(slug);
+        await this.runClawhubInstall(slug, this.resolveAuthorForSlug(slug));
         this.log("info", `curated install ok: ${slug}`);
         return { slug, ok: true };
       } catch (error) {
@@ -1012,6 +1098,7 @@ export class CatalogManager {
           slug: String(entry.slug ?? ""),
           name: String(entry.name ?? entry.slug ?? ""),
           description: String(entry.description ?? "").slice(0, 150),
+          author: extractAuthorHandle(entry),
           downloads: rawDownloads > 0 ? rawDownloads : DEFAULT_DOWNLOAD_COUNT,
           stars: Number(stats.stars ?? entry.stars ?? 0),
           tags: Array.isArray(entry.tags) ? entry.tags.slice(0, 5) : [],
@@ -1064,8 +1151,13 @@ export class CatalogManager {
       return skills
         .filter((s) => !CATALOG_BLOCKLIST.has(s.slug))
         .map((s) => {
-          const corrected = SLUG_CORRECTIONS[s.slug];
-          return corrected ? { ...s, slug: corrected } : s;
+          // Backfill `author` for catalogs cached before authors were tracked.
+          const withAuthor =
+            typeof s.author === "string" ? s : { ...s, author: "" };
+          const corrected = SLUG_CORRECTIONS[withAuthor.slug];
+          return corrected
+            ? { ...withAuthor, slug: corrected }
+            : withAuthor;
         });
     } catch {
       return [];
